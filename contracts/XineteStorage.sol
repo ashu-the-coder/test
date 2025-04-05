@@ -8,8 +8,11 @@ contract XineteStorage {
     // Mapping to track CID ownership
     mapping(string => address) private cidOwnership;
     
+    // Mapping to store hash to CID relationship
+    mapping(string => string) private hashToCID;
+    
     // Event emitted when a new CID is stored
-    event CIDStored(address indexed user, string cid);
+    event CIDStored(address indexed user, string cid, string hash);
     
     // Event emitted when a CID is removed
     event CIDRemoved(address indexed user, string cid);
@@ -18,14 +21,17 @@ contract XineteStorage {
      * @dev Store a CID for the sender
      * @param cid The IPFS CID to store
      */
-    function storeCID(string memory cid) public {
+    function storeCID(string memory cid, string memory hash) public {
         require(bytes(cid).length > 0, "CID cannot be empty");
+        require(bytes(hash).length > 0, "Hash cannot be empty");
         require(cidOwnership[cid] == address(0), "CID already exists");
+        require(bytes(hashToCID[hash]).length == 0, "Hash already exists");
         
         userCIDs[msg.sender].push(cid);
         cidOwnership[cid] = msg.sender;
+        hashToCID[hash] = cid;
         
-        emit CIDStored(msg.sender, cid);
+        emit CIDStored(msg.sender, cid, hash);
     }
     
     /**
@@ -45,6 +51,17 @@ contract XineteStorage {
      */
     function verifyOwnership(address user, string memory cid) public view returns (bool) {
         return cidOwnership[cid] == user;
+    }
+    
+    /**
+     * @dev Get CID by hash
+     * @param hash The hash to lookup
+     * @return The corresponding CID
+     */
+    function getCIDByHash(string memory hash) public view returns (string memory) {
+        string memory cid = hashToCID[hash];
+        require(bytes(cid).length > 0, "Hash not found");
+        return cid;
     }
     
     /**

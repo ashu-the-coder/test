@@ -1,15 +1,16 @@
 # Xinetee Decentralized Storage Platform
 
-A decentralized storage platform built on SKALE Network that allows users to store and manage files using IPFS and blockchain technology.
+A decentralized storage platform built on SKALE Network that allows users to store and manage files using IPFS and blockchain technology, featuring secure hash-based file retrieval and enhanced smart contract functionality.
 
 ## Project Overview
 
 Xinetee is a decentralized storage solution that combines:
 - IPFS (InterPlanetary File System) for distributed file storage
 - SKALE Network for blockchain operations
-- Smart contracts for managing file ownership and access
-- FastAPI backend for API services
-- React frontend for user interface
+- Smart contracts for managing file ownership, access, and metadata
+- FastAPI backend with JWT authentication for secure API services
+- Hash-based file retrieval system for enhanced security
+- React frontend for intuitive user interface
 
 ## Technical Stack
 
@@ -18,6 +19,12 @@ Xinetee is a decentralized storage solution that combines:
 - Web3.py for blockchain interactions
 - Pinata SDK for IPFS integration
 - Python-dotenv for environment management
+- JWT-based authentication system
+- Python-multipart for file handling
+- Pydantic for data validation
+- Cryptography for secure operations
+- Beacon-chain for blockchain synchronization
+- Aiohttp for async HTTP requests
 
 ### Frontend
 - React.js
@@ -126,6 +133,24 @@ npm run dev
 2. Keep your private keys secure and never share them
 3. Use environment variables for all sensitive configuration
 4. Implement proper access controls in your smart contracts
+
+## Features
+
+### Hash-Based File Retrieval
+- Secure file identification using cryptographic hashes
+- Metadata storage on blockchain for enhanced traceability
+- Efficient file deduplication system
+
+### Authentication System
+- JWT-based secure authentication
+- User registration and login functionality
+- Protected API endpoints
+
+### Smart Contract Enhancements
+- File ownership management
+- Access control mechanisms
+- Metadata storage and retrieval
+- Event tracking for file operations
 
 ## API Documentation
 

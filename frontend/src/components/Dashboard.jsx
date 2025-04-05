@@ -1,79 +1,60 @@
 import { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../App';
 import { ethers } from 'ethers';
+import FileUpload from './FileUpload';
+import { FiDownload } from 'react-icons/fi';
 
 function Dashboard() {
   const [files, setFiles] = useState([]);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const { token, isConnected } = useContext(AuthContext);
 
   useEffect(() => {
-    fetchFiles();
-  }, []);
-
-  const fetchFiles = async () => {
-    try {
-      const response = await fetch('http://localhost:8000/storage/files', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) throw new Error('Failed to fetch files');
-
-      const data = await response.json();
-      setFiles(data.files);
-    } catch (err) {
-      setError('Error fetching files: ' + err.message);
+    if (token) {
+      fetchFiles();
     }
-  };
+  }, [token]);
 
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    setUploading(true);
-    setError('');
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('http://localhost:8000/storage/upload', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) throw new Error('Upload failed');
-
-      const data = await response.json();
-      await fetchFiles(); // Refresh file list
-    } catch (err) {
-      setError('Error uploading file: ' + err.message);
-    } finally {
-      setUploading(false);
+  const handleDownload = async (file) => {
+    if (!token) {
+      setError('Authentication token is missing');
+      return;
     }
-  };
 
-  const handleDownload = async (cid) => {
     try {
-      const response = await fetch(`http://localhost:8000/storage/file/${cid}`, {
+      console.log(`Attempting to download file with hash: ${file.hash}`);
+      
+      const response = await fetch(`http://localhost:8000/storage/download/${file.hash}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
 
-      if (!response.ok) throw new Error('Download failed');
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Download failed:', errorData);
+        if (response.status === 404) {
+          throw new Error('File not found in blockchain. The file may have been deleted.');
+        } else if (response.status === 403) {
+          throw new Error('You are not authorized to download this file.');
+        } else {
+          throw new Error(errorData.detail || 'Failed to download file');
+        }
+      }
+      
+      console.log('Successfully retrieved file from blockchain and IPFS');
+
+      const contentDisposition = response.headers.get('content-disposition');
+      const filename = contentDisposition
+        ? contentDisposition.split('filename=')[1]
+        : file.filename;
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
+
       a.href = url;
-      a.download = `file-${cid}`; // You might want to store original filenames in metadata
+      a.download = file.filename;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -83,116 +64,74 @@ function Dashboard() {
     }
   };
 
-  const handleDelete = async (cid) => {
+  const fetchFiles = async () => {
+    if (!token) {
+      setError('Authentication token is missing');
+      return;
+    }
+
     try {
-      const response = await fetch(`http://localhost:8000/storage/file/${cid}`, {
-        method: 'DELETE',
+      const response = await fetch('http://localhost:8000/storage/files', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
 
-      if (!response.ok) throw new Error('Delete failed');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to fetch files');
+      }
 
-      await fetchFiles(); // Refresh file list
+      const data = await response.json();
+      setFiles(data.files);
+      setError('');
     } catch (err) {
-      setError('Error deleting file: ' + err.message);
+      setError('Error fetching files: ' + err.message);
     }
   };
 
-  if (!isConnected) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-red-500">Please connect your wallet to continue</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Upload File
-        </label>
-        <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-          <div className="space-y-1 text-center">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              stroke="currentColor"
-              fill="none"
-              viewBox="0 0 48 48"
-              aria-hidden="true"
-            >
-              <path
-                d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <div className="flex text-sm text-gray-600">
-              <label
-                htmlFor="file-upload"
-                className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500"
-              >
-                <span>Upload a file</span>
-                <input
-                  id="file-upload"
-                  name="file-upload"
-                  type="file"
-                  className="sr-only"
-                  onChange={handleFileUpload}
-                  disabled={uploading}
-                />
-              </label>
-            </div>
-            <p className="text-xs text-gray-500">Any file up to 10MB</p>
+    <div className="space-y-6">
+      <div className="space-y-6">
+      <FileUpload onUploadSuccess={fetchFiles} />
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+        <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Your Files</h2>
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+            <p className="text-red-700 dark:text-red-400 text-sm">{error}</p>
           </div>
-        </div>
-      </div>
-
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
-          {error}
-        </div>
-      )}
-
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
-        <ul className="divide-y divide-gray-200">
-          {files.map((file) => (
-            <li key={file.cid}>
-              <div className="px-4 py-4 sm:px-6">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-indigo-600 truncate">
-                    {file.cid}
+        )}
+        <div className="space-y-4">
+          {files.map((file, index) => (
+            <div key={index} className="p-4 border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+              <p className="font-medium text-gray-900 dark:text-white">{file.filename}</p>
+              <div className="flex items-center justify-between mt-2">
+                <div>
+                  <p className="text-gray-600 dark:text-gray-400 text-sm">
+                    Uploaded: {new Date(file.upload_date).toLocaleDateString()}
                   </p>
-                  <div className="ml-2 flex-shrink-0 flex">
-                    <button
-                      onClick={() => handleDownload(file.cid)}
-                      className="mr-2 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full hover:bg-green-200"
-                    >
-                      Download
-                    </button>
-                    <button
-                      onClick={() => handleDelete(file.cid)}
-                      className="px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-full hover:bg-red-200"
-                    >
-                      Delete
-                    </button>
-                  </div>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    Size: {(file.size / 1024).toFixed(2)} KB
+                  </p>
                 </div>
-                <div className="mt-2 sm:flex sm:justify-between">
-                  <div className="sm:flex">
-                    <p className="flex items-center text-sm text-gray-500">
-                      Size: {file.metadata?.size || 'Unknown'}
-                    </p>
-                  </div>
-                </div>
+                <button
+                  onClick={() => handleDownload(file)}
+                  className="flex items-center gap-2 px-3 py-1 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                >
+                  <FiDownload className="w-4 h-4" />
+                  Download
+                </button>
               </div>
-            </li>
+            </div>
           ))}
-        </ul>
+          {files.length === 0 && (
+            <p className="text-gray-500 dark:text-gray-400 text-center py-4">
+              No files uploaded yet
+            </p>
+          )}
+        </div>
       </div>
+    </div>
     </div>
   );
 }

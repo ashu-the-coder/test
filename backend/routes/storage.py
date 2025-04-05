@@ -2,8 +2,12 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.responses import JSONResponse
 from typing import Optional
 import os
+import hashlib
+from datetime import datetime
 from services.ipfs import IPFSService
 from services.blockchain import BlockchainService
+from services.metadata import MetadataService
+from models.file_metadata import FileMetadata
 from .auth import get_current_user
 
 router = APIRouter()
@@ -11,59 +15,83 @@ router = APIRouter()
 # Initialize services
 ipfs_service = IPFSService()
 blockchain_service = BlockchainService()
+metadata_service = MetadataService()
 
 @router.post("/upload")
 async def upload_file(
     file: UploadFile = File(...),
-    current_user: str = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     try:
         # Upload file to IPFS through Pinata
         cid = await ipfs_service.upload_file(file)
         
-        # Store CID in blockchain
-        tx_hash = await blockchain_service.store_cid(current_user, cid)
+        # Generate a unique hash for the file using CID
+        file_hash = hashlib.sha256(cid.encode()).hexdigest()
+        
+        # Store CID and hash in blockchain
+        tx_hash = await blockchain_service.store_cid(current_user, cid, file_hash)
+        
+        # Store file metadata without CID
+        metadata = FileMetadata(
+            filename=file.filename,
+            user=current_user["username"],
+            size=file.size,
+            upload_date=datetime.now(),
+            content_type=file.content_type,
+            file_hash=file_hash,
+            transaction_hash=tx_hash
+        )
+        await metadata_service.store_metadata(metadata)
         
         return {
             "status": "success",
-            "cid": cid,
-            "tx_hash": tx_hash,
-            "filename": file.filename
+            "filename": file.filename,
+            "upload_date": metadata.upload_date,
+            "size": metadata.size,
+            "file_hash": file_hash,
+            "transaction_hash": tx_hash
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/files")
-async def get_user_files(current_user: str = Depends(get_current_user)):
+async def get_user_files(current_user: dict = Depends(get_current_user)):
     try:
-        # Get all CIDs for the user from blockchain
-        cids = await blockchain_service.get_user_cids(current_user)
+        # Get file metadata for the user
+        files = await metadata_service.get_user_files(current_user["username"])
         
-        # Get file metadata from Pinata for each CID
-        files = []
-        for cid in cids:
-            metadata = await ipfs_service.get_file_metadata(cid)
-            files.append({
-                "cid": cid,
-                "metadata": metadata
-            })
-        
-        return {"files": files}
+        # Return file information with transaction hashes
+        return {
+            "files": [{
+                "filename": f["filename"],
+                "upload_date": f["upload_date"],
+                "size": f["size"],
+                "content_type": f["content_type"],
+                "file_hash": f["file_hash"],
+                "transaction_hash": f["transaction_hash"]
+            } for f in files]
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/file/{cid}")
+@router.get("/file/{file_hash}")
 async def get_file(
-    cid: str,
-    current_user: str = Depends(get_current_user)
+    file_hash: str,
+    current_user: dict = Depends(get_current_user)
 ):
     try:
-        # Verify ownership
+        # Get CID from blockchain using file hash
+        cid = await blockchain_service.get_cid_by_hash(file_hash)
+        if not cid:
+            raise HTTPException(status_code=404, detail="File not found")
+            
+        # Verify ownership through blockchain
         is_owner = await blockchain_service.verify_ownership(current_user, cid)
         if not is_owner:
             raise HTTPException(status_code=403, detail="Not authorized to access this file")
         
-        # Get file from IPFS
+        # Get file from IPFS using CID
         file_data = await ipfs_service.get_file(cid)
         return JSONResponse(content=file_data)
     except Exception as e:
@@ -72,7 +100,7 @@ async def get_file(
 @router.delete("/file/{cid}")
 async def delete_file(
     cid: str,
-    current_user: str = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     try:
         # Verify ownership

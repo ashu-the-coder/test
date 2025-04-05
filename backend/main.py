@@ -24,11 +24,13 @@ async def read_root():
     return {"status": "healthy", "service": "Xinete Storage Platform"}
 
 # Import routes after app initialization to avoid circular imports
-from routes import auth, storage
+from routes import auth, storage, download, verification
 
 # Include routers
-app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
-app.include_router(storage.router, prefix="/storage", tags=["Storage"])
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(storage.router, prefix="/storage", tags=["storage"])
+app.include_router(download.router, prefix="/api", tags=["download"])
+app.include_router(verification.router, prefix="/api/verification", tags=["verification"])
 
 if __name__ == "__main__":
     import uvicorn
