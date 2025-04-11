@@ -22,9 +22,9 @@ function Dashboard() {
     }
 
     try {
-      console.log(`Attempting to download file with hash: ${file.hash}`);
+      console.log(`Attempting to download file with hash: ${file.file_hash}`);
       
-      const response = await fetch(`http://localhost:8000/storage/download/${file.hash}`, {
+      const response = await fetch(`http://localhost:8000/storage/download/${file.file_hash}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

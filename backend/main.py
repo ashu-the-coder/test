@@ -10,9 +10,12 @@ load_dotenv()
 app = FastAPI(title="Xinete Storage Platform")
 
 # Configure CORS
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+print(f"Configuring CORS with allowed origins: {allowed_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

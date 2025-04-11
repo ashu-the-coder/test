@@ -39,7 +39,7 @@ class MetadataService:
         # Convert stored datetime strings back to datetime objects
         for file in files:
             if 'upload_date' in file and isinstance(file['upload_date'], str):
-                file['upload_date'] = datetime.fromisoformat(file['upload_date'])
+                file['upload_date'] = datetime.strptime(file['upload_date'], '%Y-%m-%d %H:%M:%S.%f')
         return files
     
     async def get_file_metadata(self, user: str, file_hash: str) -> Optional[Dict]:

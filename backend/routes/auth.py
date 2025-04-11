@@ -38,9 +38,14 @@ class Token(BaseModel):
     token_type: str
 
 # JWT configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is not set")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+print(f"Auth service initialized with SECRET_KEY configured: {bool(SECRET_KEY)}")
+
 
 def create_access_token(data: dict):
     to_encode = data.copy()

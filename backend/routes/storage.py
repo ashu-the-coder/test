@@ -32,11 +32,17 @@ async def upload_file(
         # Store CID and hash in blockchain
         tx_hash = await blockchain_service.store_cid(current_user, cid, file_hash)
         
+        # Calculate file size
+        await file.seek(0)
+        file_content = await file.read()
+        file_size = len(file_content)
+        await file.seek(0)
+        
         # Store file metadata without CID
         metadata = FileMetadata(
             filename=file.filename,
             user=current_user["username"],
-            size=file.size,
+            size=file_size,
             upload_date=datetime.now(),
             content_type=file.content_type,
             file_hash=file_hash,
