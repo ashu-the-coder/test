@@ -37,4 +37,8 @@ app.include_router(verification.router, prefix="/api/verification", tags=["verif
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # Get port from environment variable or use default
+    port = int(os.getenv("PORT", 8000))
+    # Configure host for VM deployment
+    host = os.getenv("HOST", "0.0.0.0")
+    uvicorn.run("main:app", host=host, port=port, reload=False)
