@@ -119,7 +119,6 @@ uvicorn main:app --reload
 2. Start the Frontend:
 ```bash
 cd frontend
-npm run dev
 ```
 
 3. Access the application:
