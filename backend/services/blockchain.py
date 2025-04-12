@@ -83,7 +83,7 @@ class BlockchainService:
             })
             
             # Sign and send transaction
-            signed_tx = self.w3.eth.account.sign_transaction(tx, os.getenv("PRIVATE_KEY"))
+            signed_tx = self.account.sign_transaction(tx)
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
             
             # Wait for transaction receipt
@@ -135,7 +135,7 @@ class BlockchainService:
             })
             
             # Sign and send transaction
-            signed_tx = self.w3.eth.account.sign_transaction(tx, os.getenv("PRIVATE_KEY"))
+            signed_tx = self.account.sign_transaction(tx)
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
             
             # Wait for transaction receipt
