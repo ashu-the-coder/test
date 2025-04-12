@@ -18,8 +18,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configure CORS
+default_origins = ["http://164.52.203.17:5173", "http://localhost:5173"]
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
 allowed_origins = [origin.strip() for origin in allowed_origins if origin.strip()]
+allowed_origins.extend(default_origins)
 logger.info(f"Configuring CORS with allowed origins: {allowed_origins}")
 
 app.add_middleware(
