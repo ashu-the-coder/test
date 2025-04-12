@@ -9,9 +9,18 @@ load_dotenv()
 
 app = FastAPI(title="Xinete Storage Platform")
 
+# Configure logging
+import logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Configure CORS
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
-print(f"Configuring CORS with allowed origins: {allowed_origins}")
+allowed_origins = [origin.strip() for origin in allowed_origins if origin.strip()]
+logger.info(f"Configuring CORS with allowed origins: {allowed_origins}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,6 +29,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add logging middleware
+@app.middleware("http")
+async def log_requests(request, call_next):
+    logger.info(f"Incoming request: {request.method} {request.url}")
+    logger.debug(f"Request headers: {request.headers}")
+    response = await call_next(request)
+    logger.info(f"Response status: {response.status_code}")
+    return response
 
 # Health check endpoint
 @app.get("/")
