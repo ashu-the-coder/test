@@ -86,11 +86,12 @@ class BlockchainService:
                 'from': self.account.address,
                 'nonce': nonce,
                 'gas': 2000000,
-                'gasPrice': self.w3.eth.gas_price
+                'maxFeePerGas': self.w3.eth.max_priority_fee_per_gas,
+                'maxPriorityFeePerGas': self.w3.eth.max_priority_fee_per_gas
             })
             
             # Sign and send transaction
-            signed_tx = self.account.sign_transaction(tx)
+            signed_tx = self.w3.eth.account.sign_transaction(tx, self.account.key)
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
             
             # Wait for transaction receipt
@@ -144,11 +145,12 @@ class BlockchainService:
                 'from': self.account.address,
                 'nonce': nonce,
                 'gas': 2000000,
-                'gasPrice': self.w3.eth.gas_price
+                'maxFeePerGas': self.w3.eth.max_priority_fee_per_gas,
+                'maxPriorityFeePerGas': self.w3.eth.max_priority_fee_per_gas
             })
             
             # Sign and send transaction
-            signed_tx = self.account.sign_transaction(tx)
+            signed_tx = self.w3.eth.account.sign_transaction(tx, self.account.key)
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
             
             # Wait for transaction receipt
