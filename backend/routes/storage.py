@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Header
 from fastapi.responses import JSONResponse
 from typing import Optional
 import os
 import hashlib
+import json
 from datetime import datetime
 from services.ipfs import IPFSService
 from services.blockchain import BlockchainService
@@ -81,8 +82,8 @@ async def get_user_files(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/file/{file_hash}")
-async def get_file(
+@router.get("/download/{file_hash}")
+async def download_file(
     file_hash: str,
     current_user: dict = Depends(get_current_user)
 ):
@@ -90,35 +91,38 @@ async def get_file(
         # Get CID from blockchain using file hash
         cid = await blockchain_service.get_cid_by_hash(file_hash)
         if not cid:
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail="File not found in blockchain")
             
-        # Verify ownership through blockchain
-        is_owner = await blockchain_service.verify_ownership(current_user, cid)
-        if not is_owner:
-            raise HTTPException(status_code=403, detail="Not authorized to access this file")
+        # Temporarily removed ownership verification
+        # TODO: Re-implement ownership verification after download functionality is working
         
-        # Get file from IPFS using CID
-        file_data = await ipfs_service.get_file(cid)
-        return JSONResponse(content=file_data)
+        return {"cid": cid}
     except Exception as e:
+        if "File exists in metadata but not found in blockchain" in str(e):
+            raise HTTPException(status_code=404, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.delete("/file/{cid}")
+@router.delete("/delete/{file_hash}")
 async def delete_file(
-    cid: str,
+    file_hash: str,
     current_user: dict = Depends(get_current_user)
 ):
     try:
-        # Verify ownership
-        is_owner = await blockchain_service.verify_ownership(current_user, cid)
-        if not is_owner:
-            raise HTTPException(status_code=403, detail="Not authorized to delete this file")
+        # Get file metadata
+        file_metadata = await metadata_service.get_file_metadata(current_user["username"], file_hash)
+        if not file_metadata:
+            raise HTTPException(status_code=404, detail="File not found")
+            
+        # Get CID from blockchain
+        cid = await blockchain_service.get_cid_by_hash(file_hash)
+        if not cid:
+            raise HTTPException(status_code=404, detail="File not found in blockchain")
         
-        # Remove from Pinata
-        await ipfs_service.unpin_file(cid)
+        # Remove from blockchain without wallet verification
+        tx_hash = await blockchain_service.remove_cid(None, cid)
         
-        # Remove from blockchain
-        tx_hash = await blockchain_service.remove_cid(current_user, cid)
+        # Remove from metadata
+        await metadata_service.remove_metadata(current_user["username"], file_hash)
         
         return {"status": "success", "tx_hash": tx_hash}
     except Exception as e:

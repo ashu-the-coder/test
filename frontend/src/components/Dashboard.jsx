@@ -2,12 +2,28 @@ import { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../App';
 import { ethers } from 'ethers';
 import FileUpload from './FileUpload';
-import { FiDownload } from 'react-icons/fi';
+import { FiDownload, FiTrash2 } from 'react-icons/fi';
 
 function Dashboard() {
   const [files, setFiles] = useState([]);
   const [error, setError] = useState('');
-  const { token, isConnected } = useContext(AuthContext);
+  const { token, isConnected, userAddress } = useContext(AuthContext);
+
+  const connectWallet = async () => {
+    try {
+      if (!window.ethereum) {
+        throw new Error('Please install MetaMask to use this application');
+      }
+
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      await provider.getSigner();
+      return true;
+    } catch (err) {
+      setError('Failed to connect wallet: ' + err.message);
+      return false;
+    }
+  };
 
   useEffect(() => {
     if (token) {
@@ -15,39 +31,90 @@ function Dashboard() {
     }
   }, [token]);
 
+  const handleDelete = async (file) => {
+    if (!token) {
+      setError('Authentication token is missing');
+      return;
+    }
+
+    if (!isConnected || !userAddress) {
+      const connected = await connectWallet();
+      if (!connected) {
+        setError('Please connect your wallet to delete files');
+        return;
+      }
+    }
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/storage/delete/${file.file_hash}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Wallet-Address': userAddress
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to delete file');
+      }
+
+      // Update the files list after successful deletion
+      setFiles(files.filter(f => f.file_hash !== file.file_hash));
+      setError('');
+    } catch (err) {
+      setError('Error deleting file: ' + err.message);
+    }
+  };
+
   const handleDownload = async (file) => {
     if (!token) {
       setError('Authentication token is missing');
       return;
     }
 
+    if (!isConnected || !userAddress) {
+      const connected = await connectWallet();
+      if (!connected) {
+        setError('Please connect your wallet to download files');
+        return;
+      }
+    }
+
     try {
       console.log(`Attempting to download file with hash: ${file.file_hash}`);
       
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/storage/download/${file.file_hash}`, {
+      // First get the CID from the backend
+      const cidResponse = await fetch(`${import.meta.env.VITE_API_URL}/storage/download/${file.file_hash}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
+          'X-Wallet-Address': userAddress
         },
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
+      if (!cidResponse.ok) {
+        const errorData = await cidResponse.json();
         console.error('Download failed:', errorData);
-        if (response.status === 404) {
+        if (cidResponse.status === 404) {
           throw new Error('File not found in blockchain. The file may have been deleted.');
-        } else if (response.status === 403) {
+        } else if (cidResponse.status === 403) {
           throw new Error('You are not authorized to download this file.');
         } else {
           throw new Error(errorData.detail || 'Failed to download file');
         }
       }
       
-      console.log('Successfully retrieved file from blockchain and IPFS');
+      const { cid } = await cidResponse.json();
+      console.log('Successfully retrieved CID from blockchain');
 
-      const contentDisposition = response.headers.get('content-disposition');
-      const filename = contentDisposition
-        ? contentDisposition.split('filename=')[1]
-        : file.filename;
+      // Construct Pinata gateway URL
+      const pinataUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+      
+      // Download file from Pinata gateway
+      const response = await fetch(pinataUrl);
+      if (!response.ok) {
+        throw new Error('Failed to download file from IPFS');
+      }
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -74,6 +141,7 @@ function Dashboard() {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/storage/files`, {
         headers: {
           'Authorization': `Bearer ${token}`,
+          'X-Wallet-Address': userAddress
         },
       });
 
@@ -114,24 +182,28 @@ function Dashboard() {
                     Size: {(file.size / 1024).toFixed(2)} KB
                   </p>
                 </div>
-                <button
-                  onClick={() => handleDownload(file)}
-                  className="flex items-center gap-2 px-3 py-1 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                >
-                  <FiDownload className="w-4 h-4" />
-                  Download
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDownload(file)}
+                    className="flex items-center gap-2 px-3 py-1 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                  >
+                    <FiDownload className="w-4 h-4" />
+                    Download
+                  </button>
+                  <button
+                    onClick={() => handleDelete(file)}
+                    className="flex items-center gap-2 px-3 py-1 text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    <FiTrash2 className="w-4 h-4" />
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           ))}
-          {files.length === 0 && (
-            <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-              No files uploaded yet
-            </p>
-          )}
         </div>
       </div>
-    </div>
+      </div>
     </div>
   );
 }

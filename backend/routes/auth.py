@@ -62,7 +62,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid authentication token")
         return {"username": username}
-    except jwt.JWTError:
+    except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid authentication token")
 
 @router.post("/register", response_model=Token)
@@ -96,7 +96,8 @@ async def login(user: UserLogin):
         print(f"User {user.username} not found in database")
         raise HTTPException(status_code=401, detail=f"Username '{user.username}' is not registered")
     
-    stored_password = users[normalized_username]
+    stored_user = users[normalized_username]
+    stored_password = stored_user['password'] if isinstance(stored_user, dict) else stored_user
     if stored_password != user.password:
         print(f"Invalid password attempt for user: {user.username}")
         raise HTTPException(status_code=401, detail="Invalid password")
