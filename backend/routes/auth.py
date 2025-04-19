@@ -28,6 +28,7 @@ def save_users(users):
 class UserCreate(BaseModel):
     username: str
     password: str
+    wallet_address: str
 
 class UserLogin(BaseModel):
     username: str
@@ -74,7 +75,8 @@ async def register(user: UserCreate):
     
     # In production, hash the password before storing
     users[normalized_username] = {
-        "password": user.password
+        "password": user.password,
+        "wallet_address": user.wallet_address
     }
     save_users(users)
     
@@ -109,3 +111,17 @@ async def login(user: UserLogin):
 @router.get("/me")
 async def read_users_me(current_user: dict = Depends(get_current_user)):
     return {"username": current_user["username"]}
+
+@router.get("/profile")
+async def get_profile(current_user: dict = Depends(get_current_user)):
+    users = load_users()
+    normalized_username = current_user["username"].lower()
+    user_data = users.get(normalized_username)
+    
+    if not isinstance(user_data, dict):
+        user_data = {}
+    
+    return {
+        "username": current_user["username"],
+        "wallet_address": user_data.get("wallet_address", None)
+    }

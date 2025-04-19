@@ -4,7 +4,9 @@ import { ethers } from 'ethers';
 import Login from './components/Login';
 import Register from './components/Register';
 import Dashboard from './components/Dashboard';
+import Profile from './components/Profile';
 import Navbar from './components/Navbar';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 // Create Authentication Context
 export const AuthContext = createContext(null);
@@ -97,45 +99,58 @@ function App() {
   };
 
   return (
-    <AuthContext.Provider value={{ token, login, logout, isConnected, setIsConnected, userAddress }}>
-      <Router>
-        <div className="min-h-screen bg-gray-100">
-          {token && <Navbar />}
-          <div className="container mx-auto px-4 py-8">
+    <ThemeProvider>
+      <AuthContext.Provider value={{ token, login, logout, isConnected, setIsConnected, userAddress }}>
+        <Router>
+          <div className="min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors duration-200">
+            {token && <Navbar />}
             <Routes>
-              <Route
-                path="/"
-                element={
-                  token ? (
-                    <Navigate to="/dashboard" />
-                  ) : (
-                    <Navigate to="/login" />
-                  )
-                }
-              />
               <Route
                 path="/login"
                 element={
-                  token ? <Navigate to="/dashboard" /> : <Login />
+                  !token ? (
+                    <Login />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
                 }
               />
               <Route
                 path="/register"
                 element={
-                  token ? <Navigate to="/dashboard" /> : <Register />
+                  !token ? (
+                    <Register />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
                 }
               />
               <Route
                 path="/dashboard"
                 element={
-                  token ? <Dashboard /> : <Navigate to="/login" />
+                  token ? (
+                    <Dashboard />
+                  ) : (
+                    <Navigate to="/login" replace />
+                  )
                 }
               />
+              <Route
+                path="/profile"
+                element={
+                  token ? (
+                    <Profile />
+                  ) : (
+                    <Navigate to="/login" replace />
+                  )
+                }
+              />
+              <Route path="/" element={<Navigate to="/login" replace />} />
             </Routes>
           </div>
-        </div>
-      </Router>
-    </AuthContext.Provider>
+        </Router>
+      </AuthContext.Provider>
+    </ThemeProvider>
   );
 }
 

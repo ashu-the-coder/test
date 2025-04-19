@@ -41,19 +41,34 @@ Xinetee is a decentralized storage solution that combines:
 ```
 ├── backend/
 │   ├── main.py              # FastAPI application entry point
+│   ├── models/              # Data models and schemas
 │   ├── routes/              # API route handlers
 │   ├── services/            # Business logic services
-│   └── .env                 # Environment configuration
+│   ├── file_metadata.json   # File metadata storage
+│   ├── users.json           # User data storage
+│   └── user_data/           # User-specific data directory
 ├── contracts/
-│   └── XineteStorage.sol    # Smart contract
+│   └── XineteStorage.sol    # Smart contract for storage management
 ├── frontend/
-│   ├── src/
-│   │   ├── App.jsx
-│   │   └── components/      # React components
-│   └── package.json
+│   ├── src/                 # Source code directory
+│   │   ├── components/      # React components
+│   │   ├── hooks/           # Custom React hooks
+│   │   ├── services/        # API and blockchain services
+│   │   ├── styles/          # CSS and styling files
+│   │   ├── utils/           # Utility functions
+│   │   └── App.jsx          # Main application component
+│   ├── index.html           # HTML entry point
+│   ├── package.json         # Frontend dependencies
+│   ├── tailwind.config.js   # Tailwind CSS configuration
+│   ├── postcss.config.js    # PostCSS configuration
+│   └── vite.config.js       # Vite bundler configuration
 ├── scripts/
 │   └── deploy.js            # Contract deployment script
-└── hardhat.config.js        # Hardhat configuration
+├── artifacts/               # Compiled contract artifacts
+├── cache/                   # Hardhat cache directory
+├── hardhat.config.js        # Hardhat configuration
+├── package.json             # Project dependencies
+└── requirements.txt         # Python dependencies
 ```
 
 ## Setup Instructions
@@ -110,6 +125,8 @@ npm install
 
 ## Running the Application
 
+### Development Environment
+
 1. Start the Backend:
 ```bash
 cd backend
@@ -119,12 +136,20 @@ uvicorn main:app --reload
 2. Start the Frontend:
 ```bash
 cd frontend
+npm run dev
 ```
 
-3. Access the application:
+3. Access the development environment:
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000
 - API Documentation: http://localhost:8000/docs
+
+### Production Environment
+
+The application is deployed and accessible at:
+- Frontend: http://164.52.203.17:5173
+- Backend API: http://164.52.203.17:8000
+- API Documentation: http://164.52.203.17:8000/docs
 
 ## Security Considerations
 
@@ -135,21 +160,34 @@ cd frontend
 
 ## Features
 
-### Hash-Based File Retrieval
-- Secure file identification using cryptographic hashes
-- Metadata storage on blockchain for enhanced traceability
-- Efficient file deduplication system
-
-### Authentication System
-- JWT-based secure authentication
+### User Authentication and Profile Management
+- JWT-based secure authentication system
 - User registration and login functionality
-- Protected API endpoints
+- MetaMask wallet integration for blockchain interactions
+- User profile management with wallet address linking
+- Protected API endpoints with role-based access control
 
-### Smart Contract Enhancements
-- File ownership management
-- Access control mechanisms
+### File Management System
+- Secure file upload and download through IPFS
+- Pinata service integration for reliable IPFS pinning
+- File metadata storage on blockchain
+- Efficient file deduplication system
+- Hash-based file identification and retrieval
+- File sharing capabilities between users
+
+### Smart Contract Features
+- File ownership management and tracking
+- Access control mechanisms for shared files
 - Metadata storage and retrieval
-- Event tracking for file operations
+- Event tracking for all file operations
+- Integration with SKALE Network for scalability
+
+### User Interface
+- Modern and responsive React-based interface
+- Dark/Light theme support for better user experience
+- Real-time file upload progress tracking
+- Intuitive file management dashboard
+- Seamless MetaMask integration for transactions
 
 ## API Documentation
 
