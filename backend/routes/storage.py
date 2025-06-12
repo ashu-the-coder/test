@@ -63,12 +63,13 @@ async def upload_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/files", response_model=List[FileMetadata])
+@router.get("/files")
 async def get_user_files(current_user: dict = Depends(get_current_user)):
     normalized_username = current_user["username"].lower()
     db_user = users_collection.find_one({"username": normalized_username})
     files = db_user.get("files", []) if db_user else []
-    return [FileMetadata(**f) if not isinstance(f, FileMetadata) else f for f in files]
+    # Always return as { files: [...] } for frontend compatibility
+    return {"files": [FileMetadata(**f).dict() if not isinstance(f, FileMetadata) else f.dict() for f in files]}
 
 @router.get("/user", response_model=User)
 async def get_user(current_user: dict = Depends(get_current_user)):
