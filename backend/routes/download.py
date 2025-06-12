@@ -4,6 +4,7 @@ from services.ipfs import IPFSService
 from routes.auth import get_current_user
 from fastapi.responses import StreamingResponse
 import io
+from models.user import User, FileMetadata
 
 router = APIRouter()
 blockchain_service = BlockchainService()
@@ -56,3 +57,16 @@ async def download_file(file_hash: str, current_user: dict = Depends(get_current
         raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/user/{username}", response_model=User)
+async def get_user_by_username(username: str):
+    from routes.auth import load_users
+    users = load_users()
+    normalized_username = username.lower()
+    user_data = users.get(normalized_username, {})
+    wallet_address = user_data.get("wallet_address", None)
+    from services.metadata import MetadataService
+    metadata_service = MetadataService()
+    files = await metadata_service.get_user_files(username)
+    file_objs = [FileMetadata(**f) for f in files]
+    return User(username=username, wallet_address=wallet_address, files=file_objs)

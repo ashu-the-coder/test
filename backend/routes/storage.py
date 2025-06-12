@@ -1,22 +1,29 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Header
 from fastapi.responses import JSONResponse
-from typing import Optional
+from typing import Optional, List
 import os
 import hashlib
 import json
 from datetime import datetime
+from pymongo import MongoClient
+
 from services.ipfs import IPFSService
 from services.blockchain import BlockchainService
-from services.metadata import MetadataService
-from models.file_metadata import FileMetadata
+from models.user import User
 from .auth import get_current_user
+from routes.auth import user_store
+from models.user import FileMetadata
 
 router = APIRouter()
 
 # Initialize services
 ipfs_service = IPFSService()
 blockchain_service = BlockchainService()
-metadata_service = MetadataService()
+
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://100.123.165.22:27017")
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client[os.getenv("MONGO_DB", "xinetee")]
+users_collection = db[os.getenv("MONGO_USERS_COLLECTION", "users")]
 
 @router.post("/upload")
 async def upload_file(
@@ -24,33 +31,28 @@ async def upload_file(
     current_user: dict = Depends(get_current_user)
 ):
     try:
-        # Upload file to IPFS through Pinata
+        # Upload file to IPFS
         cid = await ipfs_service.upload_file(file)
-        
-        # Generate a unique hash for the file using CID
         file_hash = hashlib.sha256(cid.encode()).hexdigest()
-        
-        # Store CID and hash in blockchain
         tx_hash = await blockchain_service.store_cid(current_user, cid, file_hash)
-        
-        # Calculate file size
         await file.seek(0)
         file_content = await file.read()
         file_size = len(file_content)
         await file.seek(0)
-        
-        # Store file metadata without CID
         metadata = FileMetadata(
             filename=file.filename,
-            user=current_user["username"],
             size=file_size,
             upload_date=datetime.now(),
             content_type=file.content_type,
             file_hash=file_hash,
             transaction_hash=tx_hash
         )
-        await metadata_service.store_metadata(metadata)
-        
+        normalized_username = current_user["username"].lower()
+        users_collection.update_one(
+            {"username": normalized_username},
+            {"$push": {"files": metadata.dict()}},
+            upsert=True
+        )
         return {
             "status": "success",
             "filename": file.filename,
@@ -62,25 +64,21 @@ async def upload_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/files")
+@router.get("/files", response_model=List[FileMetadata])
 async def get_user_files(current_user: dict = Depends(get_current_user)):
-    try:
-        # Get file metadata for the user
-        files = await metadata_service.get_user_files(current_user["username"])
-        
-        # Return file information with transaction hashes
-        return {
-            "files": [{
-                "filename": f["filename"],
-                "upload_date": f["upload_date"],
-                "size": f["size"],
-                "content_type": f["content_type"],
-                "file_hash": f["file_hash"],
-                "transaction_hash": f["transaction_hash"]
-            } for f in files]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    normalized_username = current_user["username"].lower()
+    db_user = users_collection.find_one({"username": normalized_username})
+    files = db_user.get("files", []) if db_user else []
+    return [FileMetadata(**f) if not isinstance(f, FileMetadata) else f for f in files]
+
+@router.get("/user", response_model=User)
+async def get_user(current_user: dict = Depends(get_current_user)):
+    normalized_username = current_user["username"].lower()
+    db_user = users_collection.find_one({"username": normalized_username})
+    wallet_address = db_user.get("wallet_address", None) if db_user else None
+    files = db_user.get("files", []) if db_user else []
+    file_objs = [FileMetadata(**f) if not isinstance(f, FileMetadata) else f for f in files]
+    return User(username=current_user["username"], wallet_address=wallet_address, files=file_objs)
 
 @router.get("/download/{file_hash}")
 async def download_file(
@@ -108,22 +106,18 @@ async def delete_file(
     current_user: dict = Depends(get_current_user)
 ):
     try:
-        # Get file metadata
-        file_metadata = await metadata_service.get_file_metadata(current_user["username"], file_hash)
-        if not file_metadata:
-            raise HTTPException(status_code=404, detail="File not found")
-            
-        # Get CID from blockchain
+        normalized_username = current_user["username"].lower()
+        db_user = users_collection.find_one({"username": normalized_username})
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        files = db_user.get("files", [])
+        new_files = [f for f in files if (f["file_hash"] if isinstance(f, dict) else f.file_hash) != file_hash]
+        users_collection.update_one(
+            {"username": normalized_username},
+            {"$set": {"files": new_files}}
+        )
         cid = await blockchain_service.get_cid_by_hash(file_hash)
-        if not cid:
-            raise HTTPException(status_code=404, detail="File not found in blockchain")
-        
-        # Remove from blockchain without wallet verification
-        tx_hash = await blockchain_service.remove_cid(None, cid)
-        
-        # Remove from metadata
-        await metadata_service.remove_metadata(current_user["username"], file_hash)
-        
+        tx_hash = await blockchain_service.remove_cid(None, cid) if cid else None
         return {"status": "success", "tx_hash": tx_hash}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

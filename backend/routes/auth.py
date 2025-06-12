@@ -5,25 +5,18 @@ import os
 from datetime import datetime, timedelta
 import jwt
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from models.user import User, FileMetadata
+from services.metadata import MetadataService
+from pymongo import MongoClient
 
 router = APIRouter()
 security = HTTPBearer()
+metadata_service = MetadataService()
 
-import json
-import os.path
-
-# File-based user storage
-USER_DB_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'users.json')
-
-def load_users():
-    if os.path.exists(USER_DB_FILE):
-        with open(USER_DB_FILE, 'r') as f:
-            return json.load(f)
-    return {}
-
-def save_users(users):
-    with open(USER_DB_FILE, 'w') as f:
-        json.dump(users, f)
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://100.123.165.22:27017")
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client[os.getenv("MONGO_DB", "xinetee")]
+users_collection = db[os.getenv("MONGO_USERS_COLLECTION", "users")]
 
 class UserCreate(BaseModel):
     username: str
@@ -45,9 +38,6 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-print(f"Auth service initialized with SECRET_KEY configured: {bool(SECRET_KEY)}")
-
-
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -68,60 +58,56 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 
 @router.post("/register", response_model=Token)
 async def register(user: UserCreate):
-    users = load_users()
     normalized_username = user.username.lower()
-    if normalized_username in users:
+    if users_collection.find_one({"username": normalized_username}):
         raise HTTPException(status_code=400, detail="Username already registered")
-    
-    # In production, hash the password before storing
-    users[normalized_username] = {
+    users_collection.insert_one({
+        "username": normalized_username,
         "password": user.password,
-        "wallet_address": user.wallet_address
-    }
-    save_users(users)
-    
+        "wallet_address": user.wallet_address,
+        "files": []
+    })
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/login", response_model=Token)
 async def login(user: UserLogin):
-    users = load_users()
-    print(f"Attempting login for user: {user.username}")
-    print(f"Available users: {list(users.keys())}")
-    
-    if not users:
-        print("No users found in database")
-        raise HTTPException(status_code=401, detail="No users registered in the system")
-    
     normalized_username = user.username.lower()
-    if normalized_username not in users:
-        print(f"User {user.username} not found in database")
+    db_user = users_collection.find_one({"username": normalized_username})
+    if not db_user:
         raise HTTPException(status_code=401, detail=f"Username '{user.username}' is not registered")
-    
-    stored_user = users[normalized_username]
-    stored_password = stored_user['password'] if isinstance(stored_user, dict) else stored_user
-    if stored_password != user.password:
-        print(f"Invalid password attempt for user: {user.username}")
+    if db_user['password'] != user.password:
         raise HTTPException(status_code=401, detail="Invalid password")
-    
-    print(f"Successful login for user: {user.username}")
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.get("/me")
+@router.get("/me", response_model=User)
 async def read_users_me(current_user: dict = Depends(get_current_user)):
-    return {"username": current_user["username"]}
-
-@router.get("/profile")
-async def get_profile(current_user: dict = Depends(get_current_user)):
-    users = load_users()
     normalized_username = current_user["username"].lower()
-    user_data = users.get(normalized_username)
-    
-    if not isinstance(user_data, dict):
-        user_data = {}
-    
-    return {
-        "username": current_user["username"],
-        "wallet_address": user_data.get("wallet_address", None)
-    }
+    db_user = users_collection.find_one({"username": normalized_username})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    wallet_address = db_user.get("wallet_address", None)
+    files = db_user.get("files", [])
+    file_objs = [FileMetadata(**f) if not isinstance(f, FileMetadata) else f for f in files]
+    return User(username=current_user["username"], wallet_address=wallet_address, files=file_objs)
+
+@router.get("/profile", response_model=User)
+async def get_profile(current_user: dict = Depends(get_current_user)):
+    normalized_username = current_user["username"].lower()
+    db_user = users_collection.find_one({"username": normalized_username})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    wallet_address = db_user.get("wallet_address", None)
+    files = db_user.get("files", [])
+    file_objs = [FileMetadata(**f) if not isinstance(f, FileMetadata) else f for f in files]
+    return User(username=current_user["username"], wallet_address=wallet_address, files=file_objs)
+
+@router.get("/all-users", response_model=list[User])
+async def get_all_users():
+    users = []
+    for db_user in users_collection.find():
+        files = db_user.get("files", [])
+        file_objs = [FileMetadata(**f) if not isinstance(f, FileMetadata) else f for f in files]
+        users.append(User(username=db_user["username"], wallet_address=db_user.get("wallet_address"), files=file_objs))
+    return users

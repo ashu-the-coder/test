@@ -13,3 +13,4 @@ python-jose>=3.3.0
 passlib>=1.7.4
 aiohttp>=3.8.1
 fastapi-cors>=0.0.6
+pymongo
