@@ -11,7 +11,6 @@ from services.ipfs import IPFSService
 from services.blockchain import BlockchainService
 from models.user import User
 from .auth import get_current_user
-from routes.auth import user_store
 from models.user import FileMetadata
 
 router = APIRouter()
