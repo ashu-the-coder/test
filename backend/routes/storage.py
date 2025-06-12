@@ -90,10 +90,10 @@ async def download_file(
         cid = await blockchain_service.get_cid_by_hash(file_hash)
         if not cid:
             raise HTTPException(status_code=404, detail="File not found in blockchain")
-        # Use self-hosted IPFS gateway for download
+        # Use self-hosted IPFS gateway for download (ensure correct URL)
         ipfs_gateway = os.getenv("IPFS_GATEWAY", "http://100.123.165.22:8080/ipfs")
-        ipfs_url = f"{ipfs_gateway}/{cid}"
-        return RedirectResponse(ipfs_url)
+        ipfs_url = f"{ipfs_gateway.rstrip('/')}/{cid}"
+        return {"ipfs_url": ipfs_url, "cid": cid}
     except Exception as e:
         if "File exists in metadata but not found in blockchain" in str(e):
             raise HTTPException(status_code=404, detail=str(e))

@@ -84,7 +84,7 @@ function Dashboard() {
     try {
       console.log(`Attempting to download file with hash: ${file.file_hash}`);
       
-      // First get the CID from the backend
+      // First get the IPFS URL and CID from the backend
       const cidResponse = await fetch(`${import.meta.env.VITE_API_URL}/storage/download/${file.file_hash}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -103,15 +103,10 @@ function Dashboard() {
           throw new Error(errorData.detail || 'Failed to download file');
         }
       }
-      
-      const { cid } = await cidResponse.json();
-      console.log('Successfully retrieved CID from blockchain');
 
-      // Construct IPFS gateway URL for self-hosted node
-      const ipfsGateway = import.meta.env.VITE_IPFS_GATEWAY || 'http://100.123.165.22:8080/ipfs';
-      const ipfsUrl = `${ipfsGateway}/${cid}`;
+      const { ipfs_url } = await cidResponse.json();
       // Download file from self-hosted IPFS gateway
-      const response = await fetch(ipfsUrl);
+      const response = await fetch(ipfs_url);
       if (!response.ok) {
         throw new Error('Failed to download file from IPFS');
       }
