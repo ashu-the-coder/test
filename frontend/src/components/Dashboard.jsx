@@ -170,7 +170,7 @@ function Dashboard() {
           </div>
         )}
         <div className="space-y-4">
-          {files.map((file, index) => (
+          {(Array.isArray(files) ? files : []).map((file, index) => (
             <div key={index} className="p-4 border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
               <p className="font-medium text-gray-900 dark:text-white">{file.filename}</p>
               <div className="flex items-center justify-between mt-2">
