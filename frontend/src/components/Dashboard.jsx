@@ -107,11 +107,11 @@ function Dashboard() {
       const { cid } = await cidResponse.json();
       console.log('Successfully retrieved CID from blockchain');
 
-      // Construct Pinata gateway URL
-      const pinataUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
-      
-      // Download file from Pinata gateway
-      const response = await fetch(pinataUrl);
+      // Construct IPFS gateway URL for self-hosted node
+      const ipfsGateway = import.meta.env.VITE_IPFS_GATEWAY || 'http://100.123.165.22:8080/ipfs';
+      const ipfsUrl = `${ipfsGateway}/${cid}`;
+      // Download file from self-hosted IPFS gateway
+      const response = await fetch(ipfsUrl);
       if (!response.ok) {
         throw new Error('Failed to download file from IPFS');
       }
