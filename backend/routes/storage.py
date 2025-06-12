@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Header
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from typing import Optional, List
 import os
 import hashlib
@@ -90,11 +90,10 @@ async def download_file(
         cid = await blockchain_service.get_cid_by_hash(file_hash)
         if not cid:
             raise HTTPException(status_code=404, detail="File not found in blockchain")
-            
-        # Temporarily removed ownership verification
-        # TODO: Re-implement ownership verification after download functionality is working
-        
-        return {"cid": cid}
+        # Use self-hosted IPFS gateway for download
+        ipfs_gateway = os.getenv("IPFS_GATEWAY", "http://100.123.165.22:8080/ipfs")
+        ipfs_url = f"{ipfs_gateway}/{cid}"
+        return RedirectResponse(ipfs_url)
     except Exception as e:
         if "File exists in metadata but not found in blockchain" in str(e):
             raise HTTPException(status_code=404, detail=str(e))
