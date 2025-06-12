@@ -13,7 +13,7 @@ router = APIRouter()
 security = HTTPBearer()
 metadata_service = MetadataService()
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://100.123.165.22:27017")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:%40dminXinetee%40123@100.123.165.22:27017")
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client[os.getenv("MONGO_DB", "xinetee")]
 users_collection = db[os.getenv("MONGO_USERS_COLLECTION", "users")]
