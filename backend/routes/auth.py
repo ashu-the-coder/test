@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict
 import os
 from datetime import datetime, timedelta
-import jwt
+from jwt import encode, decode
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from models.user import User, FileMetadata
 from services.metadata import MetadataService
@@ -42,18 +42,18 @@ def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict:
     try:
         token = credentials.credentials
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid authentication token")
         return {"username": username}
-    except jwt.InvalidTokenError:
+    except Exception:
         raise HTTPException(status_code=401, detail="Invalid authentication token")
 
 @router.post("/register", response_model=Token)
