@@ -53,3 +53,18 @@ class IPFSService:
             return True
         except Exception as e:
             raise Exception(f"Error unpinning file: {str(e)}")
+
+    async def get_ipfs_view_link(self, cid: str) -> str:
+        """
+        Get a public IPFS view link for a CID.
+        
+        This uses the public IPFS gateway at ipfs.io instead of a local gateway,
+        which makes it accessible to anyone on the internet.
+        
+        Args:
+            cid: The IPFS CID
+            
+        Returns:
+            str: The public gateway URL
+        """
+        return f"https://ipfs.io/ipfs/{cid}"

@@ -6,6 +6,14 @@ import Register from './components/Register';
 import Dashboard from './components/Dashboard';
 import Profile from './components/Profile';
 import Navbar from './components/Navbar';
+import EnterpriseWelcome from './components/EnterpriseWelcome';
+import EnterpriseRegister from './components/EnterpriseRegister';
+import EnterpriseModules from './components/EnterpriseModules';
+import EnterpriseProfile from './components/EnterpriseProfile';
+import ProductManagement from './components/ProductManagement';
+import BatchManagement from './components/BatchManagement';
+import Traceability from './components/Traceability';
+import InventoryManagement from './components/InventoryManagement';
 import { ThemeProvider } from './contexts/ThemeContext';
 
 // Create Authentication Context
@@ -15,6 +23,7 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [isConnected, setIsConnected] = useState(localStorage.getItem('walletConnected') === 'true');
   const [userAddress, setUserAddress] = useState(localStorage.getItem('userAddress'));
+  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || 'individual');
 
   useEffect(() => {
     const checkWalletConnection = async () => {
@@ -68,9 +77,13 @@ function App() {
     }
   }, []);
 
-  const login = async (newToken) => {
+  const login = async (newToken, role = 'individual') => {
     setToken(newToken);
     localStorage.setItem('token', newToken);
+    
+    // Set user role
+    setUserRole(role);
+    localStorage.setItem('userRole', role);
     
     // Check wallet connection on login
     if (window.ethereum) {
@@ -94,13 +107,15 @@ function App() {
     setToken(null);
     setIsConnected(false);
     setUserAddress(null);
+    setUserRole('individual');
     localStorage.removeItem('token');
     localStorage.removeItem('userAddress');
+    localStorage.removeItem('userRole');
   };
 
   return (
     <ThemeProvider>
-      <AuthContext.Provider value={{ token, login, logout, isConnected, setIsConnected, userAddress }}>
+      <AuthContext.Provider value={{ token, login, logout, isConnected, setIsConnected, userAddress, userRole }}>
         <Router>
           <div className="min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors duration-200">
             {token && <Navbar />}
@@ -143,6 +158,38 @@ function App() {
                   ) : (
                     <Navigate to="/login" replace />
                   )
+                }
+              />
+              <Route path="/enterprise" element={<EnterpriseWelcome />} />
+              <Route path="/enterprise/register" element={<EnterpriseRegister />} />
+              <Route
+                path="/enterprise/modules"
+                element={
+                  token ? <EnterpriseModules /> : <Navigate to="/login" replace />
+                }
+              />
+              <Route
+                path="/enterprise/profile"
+                element={
+                  token ? <EnterpriseProfile /> : <Navigate to="/login" replace />
+                }
+              />
+              <Route
+                path="/enterprise/products"
+                element={
+                  token ? <ProductManagement /> : <Navigate to="/login" replace />
+                }
+              />
+              <Route
+                path="/enterprise/traceability"
+                element={
+                  token ? <Traceability /> : <Navigate to="/login" replace />
+                }
+              />
+              <Route
+                path="/enterprise/inventory"
+                element={
+                  token ? <InventoryManagement /> : <Navigate to="/login" replace />
                 }
               />
               <Route path="/" element={<Navigate to="/login" replace />} />

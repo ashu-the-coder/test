@@ -3,11 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from pathlib import Path
 import os
+import pymongo
+from pymongo import MongoClient
 
 # Load environment variables
 load_dotenv()
 
 app = FastAPI(title="Xinete Storage Platform")
+
+# Setup MongoDB connection
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017/xinete_storage")
+client = MongoClient(MONGODB_URL)
+db = client.xinete_storage
 
 # Configure logging
 import logging
@@ -47,13 +54,19 @@ async def read_root():
     return {"status": "healthy", "service": "Xinete Storage Platform"}
 
 # Import routes after app initialization to avoid circular imports
-from routes import auth, storage, download, verification
+from routes import auth, storage, download, verification, enterprise, product, batch, traceability, inventory, audit
 
 # Include routers
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(storage.router, prefix="/storage", tags=["storage"])
 app.include_router(download.router, prefix="/api", tags=["download"])
 app.include_router(verification.router, prefix="/api/verification", tags=["verification"])
+app.include_router(enterprise.router, prefix="/enterprise", tags=["enterprise"])
+app.include_router(product.router, prefix="/product", tags=["product"])
+app.include_router(batch.router, prefix="/batch", tags=["batch"])
+app.include_router(traceability.router, prefix="/trace", tags=["traceability"])
+app.include_router(inventory.router, prefix="/inventory", tags=["inventory"])
+app.include_router(audit.router, prefix="/audit", tags=["audit"])
 
 if __name__ == "__main__":
     import uvicorn

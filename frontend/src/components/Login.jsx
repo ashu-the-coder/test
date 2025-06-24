@@ -50,7 +50,24 @@ function Login() {
         throw new Error(data.detail || 'Login failed');
       }
 
-      login(data.access_token);
+      // Parse JWT token to get user role
+      const tokenParts = data.access_token.split('.');
+      if (tokenParts.length === 3) {
+        try {
+          // Decode base64 payload
+          const payload = JSON.parse(atob(tokenParts[1]));
+          const role = payload.role || 'individual';
+          
+          // Pass role to login function
+          login(data.access_token, role);
+        } catch (e) {
+          console.error('Error parsing token:', e);
+          login(data.access_token);
+        }
+      } else {
+        login(data.access_token);
+      }
+      
       navigate('/dashboard');
     } catch (err) {
       setError(err.message);
@@ -71,6 +88,14 @@ function Login() {
               className="font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300"
             >
               create a new account
+            </Link>
+          </p>
+          <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
+            <Link
+              to="/enterprise"
+              className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
+            >
+              Access Enterprise Portal →
             </Link>
           </p>
         </div>

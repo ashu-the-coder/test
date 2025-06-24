@@ -6,6 +6,7 @@
 2. Node.js 14+ and npm installed
 3. IPFS Pinata account with API keys
 4. SKALE Network account and credentials
+5. MongoDB 4.4+ installed and running
 
 ## Backend Deployment
 
@@ -20,21 +21,39 @@ PINATA_SECRET_KEY=5039f58273154b1adfef004e07ae535c8987d5c5c1c1b44ca3b75714085cb0
 SKALE_ENDPOINT=https://testnet.skalenodes.com/v1/lanky-ill-funny-testnet
 SKALE_PRIVATE_KEY=d6795c913606efc3b717b90514cbf40b666537585c6d30b019de3fcc4f17d5f6
 JWT_SECRET=c8d1a95d37cb4e06b3e3fa1f89a37d2c9b8f276e3a094c51b5f1d98e2f7d4a6b
+MONGODB_URL=mongodb://localhost:27017/xinete_storage
 ```
 
-### 2. Install Dependencies
+### 2. Initialize Database Schema
+
+```bash
+cd backend
+python db_schema.py
+```
+
+This will create all required collections with schema validation and proper indexing.
+
+### 3. (Optional) Load Sample Data
+
+```bash
+python init_db.py
+```
+
+This will populate the database with sample enterprises, users, products, batches, and traceability data for testing purposes.
+
+### 4. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Database Setup
+### 5. Database Setup
 
 Ensure the following files exist and have write permissions:
 - `backend/users.json`
 - `backend/file_metadata.json`
 
-### 4. Start the Backend Server
+### 6. Start the Backend Server
 
 Development:
 ```bash
