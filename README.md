@@ -112,25 +112,55 @@ For detailed schema information, refer to `backend/MONGODB_SCHEMA.md`.
 
 ## MongoDB Connection
 
-The application is configured to automatically connect to MongoDB using the connection string specified in the `.env` file:
+The application is configured to automatically connect to MongoDB using the connection string and authentication credentials specified in the `.env` file:
 
+```
+# MongoDB Configuration
+MONGODB_URL=mongodb://localhost:27017/xinete_storage
+MONGODB_USERNAME=your_username
+MONGODB_PASSWORD=your_password
+```
+
+### Connection Options:
+
+#### 1. Without Authentication (Development)
 ```
 MONGODB_URL=mongodb://localhost:27017/xinete_storage
 ```
 
+#### 2. With Authentication (Production)
+```
+MONGODB_URL=mongodb://localhost:27017/xinete_storage
+MONGODB_USERNAME=your_username
+MONGODB_PASSWORD=your_password
+```
+
+#### 3. Connection String with Authentication (Alternative)
+```
+MONGODB_URL=mongodb://your_username:your_password@localhost:27017/xinete_storage
+```
+
 When deploying on a VM:
 1. Ensure MongoDB is installed and running on the VM or accessible from the VM
-2. Update the `.env` file with the correct MongoDB connection string
-3. The application will automatically connect to MongoDB when started
-4. No additional configuration is needed if MongoDB is running on the default port
+2. Update the `.env` file with the correct MongoDB connection details
+3. If MongoDB requires authentication, provide the username and password
+4. The application will automatically connect to MongoDB when started
 
-The connection is established in the `main.py` file using:
+The enhanced connection logic in `main.py` handles authentication automatically:
 
 ```python
-# Setup MongoDB connection
+# Setup MongoDB connection with authentication
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017/xinete_storage")
-client = MongoClient(MONGODB_URL)
-db = client.xinete_storage
+MONGODB_USERNAME = os.getenv("MONGODB_USERNAME", "")
+MONGODB_PASSWORD = os.getenv("MONGODB_PASSWORD", "")
+
+# Authentication is used if credentials are provided
+if MONGODB_USERNAME and MONGODB_PASSWORD:
+    # Connection logic with authentication
+    ...
+else:
+    # Connection logic without authentication
+    ...
 ```
 
 ### Database Initialization

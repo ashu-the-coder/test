@@ -21,7 +21,14 @@ PINATA_SECRET_KEY=5039f58273154b1adfef004e07ae535c8987d5c5c1c1b44ca3b75714085cb0
 SKALE_ENDPOINT=https://testnet.skalenodes.com/v1/lanky-ill-funny-testnet
 SKALE_PRIVATE_KEY=d6795c913606efc3b717b90514cbf40b666537585c6d30b019de3fcc4f17d5f6
 JWT_SECRET=c8d1a95d37cb4e06b3e3fa1f89a37d2c9b8f276e3a094c51b5f1d98e2f7d4a6b
+
+# MongoDB Configuration - Uncomment and add credentials if authentication is required
 MONGODB_URL=mongodb://localhost:27017/xinete_storage
+MONGODB_USERNAME=your_mongodb_username
+MONGODB_PASSWORD=your_mongodb_password
+
+# Alternative: MongoDB Connection String with Authentication
+# MONGODB_URL=mongodb://username:password@localhost:27017/xinete_storage
 ```
 
 ### 2. Initialize Database Schema

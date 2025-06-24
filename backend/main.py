@@ -12,9 +12,32 @@ load_dotenv()
 app = FastAPI(title="Xinete Storage Platform")
 
 # Setup MongoDB connection
+# Setup MongoDB connection with authentication support
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017/xinete_storage")
-client = MongoClient(MONGODB_URL)
-db = client.xinete_storage
+MONGODB_USERNAME = os.getenv("MONGODB_USERNAME", "")
+MONGODB_PASSWORD = os.getenv("MONGODB_PASSWORD", "")
+
+# If username and password are provided, use them in the connection
+if MONGODB_USERNAME and MONGODB_PASSWORD:
+    # Parse the connection string to add auth credentials
+    if "://" in MONGODB_URL:
+        protocol, rest = MONGODB_URL.split("://", 1)
+        auth_url = f"{protocol}://{MONGODB_USERNAME}:{MONGODB_PASSWORD}@{rest}"
+        client = MongoClient(auth_url)
+        logger.info(f"Connecting to MongoDB with authentication")
+    else:
+        client = MongoClient(MONGODB_URL)
+        # Set authentication directly if needed
+        db_name = MONGODB_URL.split("/")[-1] if "/" in MONGODB_URL else "xinete_storage"
+        client[db_name].authenticate(MONGODB_USERNAME, MONGODB_PASSWORD)
+        logger.info(f"Using direct authentication with MongoDB")
+else:
+    client = MongoClient(MONGODB_URL)
+    logger.info(f"Connecting to MongoDB without authentication")
+
+# Get database reference
+db_name = MONGODB_URL.split("/")[-1] if "/" in MONGODB_URL else "xinete_storage"
+db = client[db_name]
 
 # Configure logging
 import logging
