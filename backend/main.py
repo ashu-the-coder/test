@@ -11,34 +11,6 @@ load_dotenv()
 
 app = FastAPI(title="Xinete Storage Platform")
 
-# Setup MongoDB connection
-# Setup MongoDB connection with authentication support
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017/xinete_storage")
-MONGODB_USERNAME = os.getenv("MONGODB_USERNAME", "")
-MONGODB_PASSWORD = os.getenv("MONGODB_PASSWORD", "")
-
-# If username and password are provided, use them in the connection
-if MONGODB_USERNAME and MONGODB_PASSWORD:
-    # Parse the connection string to add auth credentials
-    if "://" in MONGODB_URL:
-        protocol, rest = MONGODB_URL.split("://", 1)
-        auth_url = f"{protocol}://{MONGODB_USERNAME}:{MONGODB_PASSWORD}@{rest}"
-        client = MongoClient(auth_url)
-        logger.info(f"Connecting to MongoDB with authentication")
-    else:
-        client = MongoClient(MONGODB_URL)
-        # Set authentication directly if needed
-        db_name = MONGODB_URL.split("/")[-1] if "/" in MONGODB_URL else "xinete_storage"
-        client[db_name].authenticate(MONGODB_USERNAME, MONGODB_PASSWORD)
-        logger.info(f"Using direct authentication with MongoDB")
-else:
-    client = MongoClient(MONGODB_URL)
-    logger.info(f"Connecting to MongoDB without authentication")
-
-# Get database reference
-db_name = MONGODB_URL.split("/")[-1] if "/" in MONGODB_URL else "xinete_storage"
-db = client[db_name]
-
 # Configure logging
 import logging
 logging.basicConfig(
@@ -46,6 +18,47 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Setup MongoDB connection with authentication support
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/xinete_storage")
+MONGODB_URL = os.getenv("MONGODB_URL", MONGO_URI)  # Fallback to MONGO_URI if MONGODB_URL not set
+MONGODB_USERNAME = os.getenv("MONGODB_USERNAME", "")
+MONGODB_PASSWORD = os.getenv("MONGODB_PASSWORD", "")
+
+# Connect to MongoDB
+try:
+    # If the connection string already includes auth, use it directly
+    if "@" in MONGODB_URL:
+        logger.info(f"Using MongoDB connection string with embedded authentication")
+        client = MongoClient(MONGODB_URL)
+    # If separate username and password provided, use them
+    elif MONGODB_USERNAME and MONGODB_PASSWORD:
+        # Parse the connection string to add auth credentials
+        if "://" in MONGODB_URL:
+            protocol, rest = MONGODB_URL.split("://", 1)
+            auth_url = f"{protocol}://{MONGODB_USERNAME}:{MONGODB_PASSWORD}@{rest}"
+            logger.info(f"Connecting to MongoDB with authentication")
+            client = MongoClient(auth_url)
+        else:
+            client = MongoClient(MONGODB_URL)
+            # Set authentication directly if needed
+            db_name = MONGODB_URL.split("/")[-1] if "/" in MONGODB_URL else "xinete_storage"
+            logger.info(f"Using direct authentication with MongoDB")
+            client[db_name].authenticate(MONGODB_USERNAME, MONGODB_PASSWORD)
+    else:
+        logger.info(f"Connecting to MongoDB without authentication")
+        client = MongoClient(MONGODB_URL)
+        
+    # Test connection
+    client.admin.command('ping')
+    logger.info("Successfully connected to MongoDB")
+except Exception as e:
+    logger.error(f"Failed to connect to MongoDB: {str(e)}")
+    raise
+
+# Get database reference
+db_name = MONGODB_URL.split("/")[-1] if "/" in MONGODB_URL else "xinete_storage"
+db = client[db_name]
 
 # Configure CORS
 default_origins = ["http://164.52.203.17:5173", "http://localhost:5173"]
