@@ -52,49 +52,22 @@ def extract_db_name_from_uri(uri):
         logger.error(f"Error parsing MongoDB URI: {e}")
         return default_db
 
-# Setup MongoDB connection with authentication support
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/xinete_storage")
-MONGODB_URL = os.getenv("MONGODB_URL", MONGO_URI)  # Fallback to MONGO_URI if MONGODB_URL not set
-MONGODB_USERNAME = os.getenv("MONGODB_USERNAME", "")
-MONGODB_PASSWORD = os.getenv("MONGODB_PASSWORD", "")
-MONGODB_DB = os.getenv("MONGODB_DB", "")  # Allow explicit database name override
+# Connect to MongoDB using our utility module
+from utils.mongodb import get_mongo_connection
 
 # Connect to MongoDB
 try:
-    # If the connection string already includes auth, use it directly
-    if "@" in MONGODB_URL:
-        logger.info(f"Using MongoDB connection string with embedded authentication")
-        client = MongoClient(MONGODB_URL)
-    # If separate username and password provided, use them
-    elif MONGODB_USERNAME and MONGODB_PASSWORD:
-        # Parse the connection string to add auth credentials
-        if "://" in MONGODB_URL:
-            protocol, rest = MONGODB_URL.split("://", 1)
-            auth_url = f"{protocol}://{MONGODB_USERNAME}:{MONGODB_PASSWORD}@{rest}"
-            logger.info(f"Connecting to MongoDB with authentication")
-            client = MongoClient(auth_url)
-        else:
-            client = MongoClient(MONGODB_URL)
-            # Get database name properly
-            db_name = extract_db_name_from_uri(MONGODB_URL)
-            logger.info(f"Using direct authentication with MongoDB")
-            client[db_name].authenticate(MONGODB_USERNAME, MONGODB_PASSWORD)
-    else:
-        logger.info(f"Connecting to MongoDB without authentication")
-        client = MongoClient(MONGODB_URL)
-        
+    client, db = get_mongo_connection()
+    
     # Test connection
     client.admin.command('ping')
     logger.info("Successfully connected to MongoDB")
+    
+    # Log the database being used
+    logger.info(f"Using database: {db.name}")
 except Exception as e:
     logger.error(f"Failed to connect to MongoDB: {str(e)}")
     raise
-
-# Get database reference - prioritize explicit DB name if provided
-db_name = MONGODB_DB if MONGODB_DB else extract_db_name_from_uri(MONGODB_URL)
-db = client[db_name]
-
-logger.info(f"Using database: {db_name}")
 
 # Configure CORS
 default_origins = ["http://164.52.203.17:5173", "http://localhost:5173"]

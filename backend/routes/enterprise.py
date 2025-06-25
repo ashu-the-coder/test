@@ -6,18 +6,90 @@ import pymongo
 import os
 from models.enterprise import Enterprise, EnterpriseCreate
 from routes.auth import get_current_active_user
+from urllib.parse import urlparse
+
+# Function to extract database name from MongoDB URI
+def extract_db_name_from_uri(uri):
+    """
+    Parse MongoDB URI to extract database name, handling cases with
+    authentication credentials and query parameters properly.
+    
+    Returns the database name or a default value if not found
+    """
+    default_db = "xinete_storage"
+    
+    if not uri:
+        return default_db
+        
+    try:
+        # Parse the URI
+        parsed = urlparse(uri)
+        
+        # Extract path and remove leading slash
+        path = parsed.path
+        if path.startswith('/'):
+            path = path[1:]
+            
+        # If path has query parameters, extract just the DB name
+        if '?' in path:
+            path = path.split('?')[0]
+            
+        # Return the extracted database name or default
+        return path if path else default_db
+    except Exception as e:
+        print(f"Error parsing MongoDB URI: {e}")
+        return default_db
 
 # Get MongoDB connection string from environment
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017/xintete_storage")
+MONGODB_URL = os.getenv("MONGODB_URL", os.getenv("MONGO_URI", "mongodb://localhost:27017/xinete_storage"))
+MONGODB_USERNAME = os.getenv("MONGODB_USERNAME", "")
+MONGODB_PASSWORD = os.getenv("MONGODB_PASSWORD", "")
+MONGODB_DB = os.getenv("MONGODB_DB", os.getenv("MONGO_DB", ""))
 
 # Setup MongoDB client
 from pymongo import MongoClient
-client = MongoClient(MONGODB_URL)
-db = client.xinete_storage
+
+# Connect to MongoDB with authentication
+try:
+    # If the connection string already includes auth, use it directly
+    if "@" in MONGODB_URL:
+        print(f"Using MongoDB connection string with embedded authentication")
+        client = MongoClient(MONGODB_URL)
+    # If separate username and password provided, use them
+    elif MONGODB_USERNAME and MONGODB_PASSWORD:
+        # Parse the connection string to add auth credentials
+        if "://" in MONGODB_URL:
+            protocol, rest = MONGODB_URL.split("://", 1)
+            auth_url = f"{protocol}://{MONGODB_USERNAME}:{MONGODB_PASSWORD}@{rest}"
+            print(f"Connecting to MongoDB with authentication")
+            client = MongoClient(auth_url)
+        else:
+            client = MongoClient(MONGODB_URL)
+            db_name = extract_db_name_from_uri(MONGODB_URL)
+            client[db_name].authenticate(MONGODB_USERNAME, MONGODB_PASSWORD)
+    else:
+        print(f"Connecting to MongoDB without authentication")
+        client = MongoClient(MONGODB_URL)
+
+    # Get database reference - prioritize explicit DB name if provided
+    db_name = MONGODB_DB if MONGODB_DB else extract_db_name_from_uri(MONGODB_URL)
+    print(f"Enterprise route using database: {db_name}")
+    db = client[db_name]
+    
+    # Test connection
+    client.admin.command('ping')
+    print("Enterprise route successfully connected to MongoDB")
+except Exception as e:
+    print(f"Enterprise route failed to connect to MongoDB: {str(e)}")
+    raise
 
 # Create enterprise collection if not exists
-if "enterprises" not in db.list_collection_names():
-    db.create_collection("enterprises")
+try:
+    if "enterprises" not in db.list_collection_names():
+        db.create_collection("enterprises")
+except Exception as e:
+    print(f"Error checking/creating collections: {str(e)}")
+    # Continue even if this fails, as the collection might be created elsewhere
     
 # Setup router
 router = APIRouter()

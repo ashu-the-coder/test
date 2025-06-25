@@ -19,10 +19,15 @@ router = APIRouter()
 ipfs_service = IPFSService()
 blockchain_service = BlockchainService()
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://100.123.165.22:27017")
-mongo_client = MongoClient(MONGO_URI)
-db = mongo_client[os.getenv("MONGO_DB", "xinetee")]
-users_collection = db[os.getenv("MONGO_USERS_COLLECTION", "users")]
+# Get MongoDB connection and collections
+try:
+    from utils.mongodb import get_mongo_connection, get_users_collection
+    mongo_client, db = get_mongo_connection()
+    users_collection = get_users_collection()
+    print("Storage route connected to MongoDB successfully")
+except Exception as e:
+    print(f"Storage route failed to connect to MongoDB: {str(e)}")
+    # Let FastAPI handle the exception
 
 @router.post("/upload")
 async def upload_file(

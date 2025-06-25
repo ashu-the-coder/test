@@ -7,16 +7,18 @@ import os
 from models.inventory import InventoryUpdate, InventoryItem, InventoryAuditLog
 from routes.auth import get_current_active_user
 
-# Get MongoDB connection string from environment
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017/xintete_storage")
-
 # Setup MongoDB client
-from pymongo import MongoClient
-client = MongoClient(MONGODB_URL)
-db = client.xinete_storage
-
-# Create collections if not exist
-if "inventory" not in db.list_collection_names():
+try:
+    from utils.mongodb import get_mongo_connection
+    client, db = get_mongo_connection()
+    print("Inventory route connected to MongoDB successfully")
+    
+    # Create collections if not exist
+    if "inventory" not in db.list_collection_names():
+        db.create_collection("inventory")
+except Exception as e:
+    print(f"Inventory route failed to connect to MongoDB: {str(e)}")
+    # Let FastAPI handle the exception
     db.create_collection("inventory")
     # Create a compound index on product_id and location for faster lookups
     db.inventory.create_index([("product_id", pymongo.ASCENDING), ("location", pymongo.ASCENDING)], unique=True)

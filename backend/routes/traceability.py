@@ -7,16 +7,18 @@ import os
 from models.traceability import TraceEvent, TraceEventCreate
 from routes.auth import get_current_active_user
 
-# Get MongoDB connection string from environment
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017/xintete_storage")
-
 # Setup MongoDB client
-from pymongo import MongoClient
-client = MongoClient(MONGODB_URL)
-db = client.xinete_storage
-
-# Create collections if not exist
-if "trace_events" not in db.list_collection_names():
+try:
+    from utils.mongodb import get_mongo_connection
+    client, db = get_mongo_connection()
+    print("Traceability route connected to MongoDB successfully")
+    
+    # Create collections if not exist
+    if "trace_events" not in db.list_collection_names():
+        db.create_collection("trace_events")
+except Exception as e:
+    print(f"Traceability route failed to connect to MongoDB: {str(e)}")
+    # Let FastAPI handle the exception
     db.create_collection("trace_events")
 
 # Setup router

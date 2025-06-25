@@ -11,13 +11,14 @@ from models.batch import Batch, BatchCreate
 from models.product import Product
 from routes.auth import get_current_active_user
 import ipfs_utils
-
-# Get MongoDB connection string from environment
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017/xintete_storage")
+from utils.mongodb import get_mongo_connection
 
 # Setup MongoDB client
-from pymongo import MongoClient
-client = MongoClient(MONGODB_URL)
+try:
+    client, db = get_mongo_connection()
+except Exception as e:
+    print(f"Error in batch route connecting to MongoDB: {str(e)}")
+    # Let FastAPI handle the exception
 db = client.xinete_storage
 
 # Create collections if not exist

@@ -8,15 +8,20 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from models.user import User, FileMetadata, Enterprise
 from services.metadata import MetadataService
 from pymongo import MongoClient
+from utils.mongodb import get_mongo_connection, get_users_collection
 
 router = APIRouter()
 security = HTTPBearer()
 metadata_service = MetadataService()
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:%40dminXinetee%40123@100.123.165.22:27017")
-mongo_client = MongoClient(MONGO_URI)
-db = mongo_client[os.getenv("MONGO_DB", "xinetee")]
-users_collection = db[os.getenv("MONGO_USERS_COLLECTION", "users")]
+# Get MongoDB connection and collections
+try:
+    mongo_client, db = get_mongo_connection()
+    users_collection = get_users_collection()
+    print("Auth route connected to MongoDB successfully")
+except Exception as e:
+    print(f"Auth route failed to connect to MongoDB: {str(e)}")
+    # Let FastAPI handle the exception
 
 class UserCreate(BaseModel):
     username: str

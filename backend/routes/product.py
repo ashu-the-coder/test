@@ -6,18 +6,18 @@ import pymongo
 import os
 from models.product import Product, ProductCreate
 from routes.auth import get_current_active_user
-
-# Get MongoDB connection string from environment
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017/xintete_storage")
+from utils.mongodb import get_mongo_connection
 
 # Setup MongoDB client
-from pymongo import MongoClient
-client = MongoClient(MONGODB_URL)
-db = client.xinete_storage
-
-# Create products collection if not exists
-if "products" not in db.list_collection_names():
-    db.create_collection("products")
+try:
+    client, db = get_mongo_connection()
+    
+    # Create products collection if not exists
+    if "products" not in db.list_collection_names():
+        db.create_collection("products")
+except Exception as e:
+    print(f"Error in product route connecting to MongoDB: {str(e)}")
+    # Let FastAPI handle the exception
 
 # Setup router
 router = APIRouter()
