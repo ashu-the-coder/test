@@ -70,18 +70,26 @@ except Exception as e:
     raise
 
 # Configure CORS
-default_origins = ["http://164.52.203.17:5173", "http://localhost:5173"]
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
-allowed_origins = [origin.strip() for origin in allowed_origins if origin.strip()]
-allowed_origins.extend(default_origins)
+# Allow all origins in development, restrict in production
+if os.getenv("ENVIRONMENT", "").lower() == "production":
+    default_origins = ["http://164.52.203.17:5173", "http://localhost:5173"]
+    allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+    allowed_origins = [origin.strip() for origin in allowed_origins if origin.strip()]
+    allowed_origins.extend(default_origins)
+else:
+    # In development, allow all origins
+    allowed_origins = ["*"]
+    
 logger.info(f"Configuring CORS with allowed origins: {allowed_origins}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
+    expose_headers=["Content-Length"],
+    max_age=600,  # Cache preflight requests for 10 minutes
 )
 
 # Add logging middleware
@@ -97,6 +105,20 @@ async def log_requests(request, call_next):
 @app.get("/")
 async def read_root():
     return {"status": "healthy", "service": "Xinete Storage Platform"}
+
+# Ensure MongoDB collections exist
+try:
+    # Create MongoDB collections if they don't exist
+    collections_to_check = ["users", "enterprises", "products", "batches", "trace_events", "inventory", "audit_logs", "file_metadata"]
+    
+    for collection_name in collections_to_check:
+        if collection_name not in db.list_collection_names():
+            logger.info(f"Creating MongoDB collection: {collection_name}")
+            db.create_collection(collection_name)
+    
+    logger.info("MongoDB collections initialized")
+except Exception as e:
+    logger.error(f"Error initializing MongoDB collections: {str(e)}")
 
 # Import routes after app initialization to avoid circular imports
 from routes import auth, storage, download, verification, enterprise, product, batch, traceability, inventory, audit
