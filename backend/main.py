@@ -70,15 +70,31 @@ except Exception as e:
     raise
 
 # Configure CORS
-# Allow all origins in development, restrict in production
-if os.getenv("ENVIRONMENT", "").lower() == "production":
-    default_origins = ["http://164.52.203.17:5173", "http://localhost:5173"]
-    allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
-    allowed_origins = [origin.strip() for origin in allowed_origins if origin.strip()]
-    allowed_origins.extend(default_origins)
-else:
-    # In development, allow all origins
-    allowed_origins = ["*"]
+# When allow_credentials=True, cannot use wildcard "*" for origins
+default_origins = [
+    "http://164.52.203.17:5173",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+    "http://100.123.165.22:5173",  # Add your specific IP
+]
+
+# Add any additional origins from environment
+env_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+additional_origins = [origin.strip() for origin in env_origins if origin.strip()]
+allowed_origins = default_origins + additional_origins
+
+# If in development mode, make sure we're being permissive
+if os.getenv("ENVIRONMENT", "").lower() != "production":
+    # Add common development origins
+    dev_origins = [
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:8080", 
+        "http://127.0.0.1:8080"
+    ]
+    allowed_origins.extend(dev_origins)
     
 logger.info(f"Configuring CORS with allowed origins: {allowed_origins}")
 
@@ -87,7 +103,7 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Content-Language", "Accept-Language"],
     expose_headers=["Content-Length"],
     max_age=600,  # Cache preflight requests for 10 minutes
 )

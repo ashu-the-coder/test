@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends, Form, Header, Request
+from fastapi import APIRouter, HTTPException, Depends, Form, Header, Request, Body
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Optional, Dict
+from typing import Optional, Dict, Any, Union
 import os
+import logging
 from datetime import datetime, timedelta
 import jwt
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -9,6 +11,9 @@ from models.user import User, FileMetadata, Enterprise
 from services.metadata import MetadataService
 from pymongo import MongoClient
 from utils.mongodb import get_mongo_connection, get_users_collection
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 security = HTTPBearer()
@@ -168,11 +173,11 @@ async def register_enterprise(enterprise: EnterpriseCreate):
 
 @router.post("/login", response_model=Token)
 async def login(
-    user: UserLogin = None, 
-    username: str = Form(None), 
-    password: str = Form(None),
-    user_agent: str = Header(None),
-    request: Request = None
+    request: Request,
+    user: Optional[UserLogin] = None, 
+    username: Optional[str] = Form(default=None), 
+    password: Optional[str] = Form(default=None),
+    user_agent: Optional[str] = Header(default=None)
 ):
     try:
         # Get client IP address for logging
@@ -180,68 +185,110 @@ async def login(
         client_agent = user_agent or "unknown"
         
         # Log request details
-        print(f"Login request from IP: {client_ip}, User-Agent: {client_agent}")
+        logger.info(f"Login request from IP: {client_ip}, User-Agent: {client_agent}")
         
         # Handle both JSON body and form data
-        if user is None and (username is not None and password is not None):
-            # Form data was provided
+        login_username = None
+        login_password = None
+        
+        # Check for form data first
+        if username is not None and password is not None:
             login_username = username
             login_password = password
-            print(f"Login attempt using form data for username: {login_username}")
+            logger.info(f"Login attempt using form data for username: {login_username}")
+        # Then check for JSON data
         elif user is not None:
-            # JSON data was provided
             login_username = user.username
             login_password = user.password
-            print(f"Login attempt using JSON for username: {login_username}")
+            logger.info(f"Login attempt using JSON for username: {login_username}")
+        # Finally try to get data from request body
         else:
+            try:
+                body = await request.json()
+                login_username = body.get("username")
+                login_password = body.get("password")
+                logger.info(f"Login attempt using raw JSON body for username: {login_username}")
+            except Exception as e:
+                logger.error(f"Error parsing request body: {str(e)}")
+                
+        # Check if we have credentials
+        if not login_username or not login_password:
+            logger.warning("Login attempt with missing credentials")
             raise HTTPException(status_code=400, detail="Missing credentials")
             
         normalized_username = login_username.lower()
+        logger.info(f"Normalized username for login: {normalized_username}")
         
         # Ensure we have a valid MongoDB connection and users collection
         from utils.mongodb import get_users_collection
         try:
             users_collection = get_users_collection()
-            print(f"Connected to users collection for login attempt")
+            logger.debug("Connected to users collection for login attempt")
         except Exception as e:
-            print(f"MongoDB connection error during login: {str(e)}")
+            logger.error(f"MongoDB connection error during login: {str(e)}")
             raise HTTPException(status_code=500, detail="Database connection error")
             
         # Attempt to find the user
         try:
             db_user = users_collection.find_one({"username": normalized_username})
             if db_user:
-                print(f"User found: {normalized_username}")
+                logger.info(f"User found in database: {normalized_username}")
             else:
-                print(f"User not found: {normalized_username}")
+                logger.warning(f"User not found in database: {normalized_username}")
         except Exception as e:
-            print(f"Error finding user in database: {str(e)}")
+            logger.error(f"Error finding user in database: {str(e)}")
             raise HTTPException(status_code=500, detail="Database query error")
             
         if not db_user:
+            logger.warning(f"Login failed - user not registered: {login_username}")
             raise HTTPException(status_code=401, detail=f"Username '{login_username}' is not registered")
+            
         if db_user['password'] != login_password:
+            logger.warning(f"Login failed - incorrect password for user: {normalized_username}")
             raise HTTPException(status_code=401, detail="Invalid password")
             
         # Get user role and enterprise ID if available
         user_role = db_user.get("role", db_user.get("user_type", "individual"))
-        enterprise_id = str(db_user.get("_id")) if user_role == "enterprise" else None
+        enterprise_id = None
         
-        print(f"User {normalized_username} logged in with role: {user_role}")
+        # Handle different types of enterprise IDs
+        if user_role == "enterprise" or "enterprise_id" in db_user:
+            if "enterprise_id" in db_user:
+                enterprise_id = str(db_user["enterprise_id"])
+            else:
+                enterprise_id = str(db_user.get("_id"))
+                
+        logger.info(f"User {normalized_username} logged in with role: {user_role}, enterprise_id: {enterprise_id}")
         
         # Create token with role information
         access_token = create_access_token(
-            data={"sub": user.username}, 
+            data={"sub": normalized_username}, 
             user_role=user_role, 
             enterprise_id=enterprise_id
         )
+        logger.info(f"Generated access token for user: {normalized_username}")
         return {"access_token": access_token, "token_type": "bearer"}
     except HTTPException:
         # Re-raise HTTP exceptions to preserve status codes
         raise
     except Exception as e:
-        print(f"Unexpected error in login: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error")
+        logger.error(f"Unexpected error in login: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.options("/login")
+async def login_options():
+    """
+    Handle OPTIONS requests for the login endpoint explicitly.
+    This helps resolve CORS preflight issues.
+    """
+    return JSONResponse(
+        content={"message": "OK"},
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
+        },
+    )
 
 @router.get("/me", response_model=User)
 async def read_users_me(current_user: dict = Depends(get_current_user)):
