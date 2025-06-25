@@ -133,15 +133,23 @@ all_allowed_headers = [
     "Access-Control-Request-Headers",
     "Access-Control-Allow-Origin",
     "Access-Control-Allow-Credentials",
-    "X-CSRF-Token"
+    "X-CSRF-Token",
+    "X-Wallet-Address",  # Add wallet address header
+    "X-API-Key"  # Common for API authentication
 ]
 
+# In development environments, we might need to be more permissive
+# CORS configuration - use a more permissive setup in all environments to debug issues
+logger.info("Configuring CORS to handle preflight requests properly")
+
+# Always allow all origins temporarily to debug CORS issues
+# This is a permissive configuration that should work in all cases
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_origins=["*"],  # Allow all origins 
+    allow_credentials=False,  # Must be False when using wildcard origins
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=all_allowed_headers,
+    allow_headers=["*"],  # Allow all headers
     expose_headers=["Content-Length", "Access-Control-Allow-Origin", "Access-Control-Allow-Credentials"],
     max_age=600,  # Cache preflight requests for 10 minutes
 )
@@ -153,6 +161,45 @@ async def log_requests(request, call_next):
     logger.debug(f"Request headers: {request.headers}")
     response = await call_next(request)
     logger.info(f"Response status: {response.status_code}")
+    return response
+
+# Middleware to debug CORS issues and add headers when needed
+@app.middleware("http")
+async def cors_debug_middleware(request, call_next):
+    """
+    Middleware to debug CORS issues and add headers when needed.
+    """
+    # For OPTIONS requests, log details
+    if request.method == "OPTIONS":
+        origin = request.headers.get("origin", "unknown")
+        req_method = request.headers.get("access-control-request-method", "unknown")
+        req_headers = request.headers.get("access-control-request-headers", "unknown")
+        logger.info(f"OPTIONS request from {origin}, method: {req_method}, headers: {req_headers}")
+        
+        # If it's a preflight request, respond immediately with appropriate headers
+        if req_method and req_headers:
+            # This is a CORS preflight request - respond directly
+            # Make sure to include X-Wallet-Address in allowed headers if needed
+            allowed_headers = req_headers
+            if "x-wallet-address" not in req_headers.lower():
+                allowed_headers = f"{req_headers}, X-Wallet-Address"
+            
+            headers = {
+                "Access-Control-Allow-Origin": origin if origin != "unknown" else "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+                "Access-Control-Allow-Headers": allowed_headers,
+                "Access-Control-Allow-Credentials": "true" if origin != "unknown" and origin != "*" else "false",
+                "Access-Control-Max-Age": "600",
+            }
+            return JSONResponse(content={"message": "OK"}, status_code=200, headers=headers)
+    
+    # Continue with the request
+    response = await call_next(request)
+    
+    # Log CORS-related responses
+    if response.status_code == 400 and request.method == "OPTIONS":
+        logger.warning("OPTIONS request returned 400 Bad Request. CORS issue likely.")
+        
     return response
 
 # Health check endpoint
@@ -189,38 +236,38 @@ app.include_router(traceability.router, prefix="/trace", tags=["traceability"])
 app.include_router(inventory.router, prefix="/inventory", tags=["inventory"])
 app.include_router(audit.router, prefix="/audit", tags=["audit"])
 
-# Add a global OPTIONS handler
-@app.options("/{path:path}")
-async def global_options_handler(request: Request, path: str):
+# Register global OPTIONS handler at the highest level
+@app.options("/{full_path:path}")
+async def global_options_catch_all(request: Request, full_path: str):
     """
-    Global handler for OPTIONS preflight requests.
-    This ensures that all OPTIONS requests get a proper response, even if
-    the specific route doesn't have an explicit options handler.
+    Global catch-all handler for OPTIONS preflight requests.
+    This will take precedence over the route-specific handlers.
     """
-    origin = request.headers.get("origin", "")
+    origin = request.headers.get("origin", "*")
     requested_method = request.headers.get("access-control-request-method", "")
     requested_headers = request.headers.get("access-control-request-headers", "")
     
-    logger.debug(f"Global OPTIONS handler for path: /{path}")
-    logger.debug(f"Origin: {origin}, Method: {requested_method}, Headers: {requested_headers}")
+    logger.info(f"Master OPTIONS handler called for path: /{full_path}")
+    logger.info(f"Origin: {origin}, Method: {requested_method}, Headers: {requested_headers}")
     
-    # Only add the specific origin to the response if it's in our allowed list
-    response_headers = {}
-    if origin and origin in allowed_origins:
-        response_headers["Access-Control-Allow-Origin"] = origin
-        response_headers["Access-Control-Allow-Credentials"] = "true"
-    
-    # Always include these headers
-    response_headers.update({
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-        "Access-Control-Allow-Headers": ", ".join(all_allowed_headers),
-        "Access-Control-Max-Age": "600"
-    })
+    # Be extremely permissive with OPTIONS requests
+    # Make sure to include X-Wallet-Address in allowed headers if not already in requested_headers
+    allowed_headers = requested_headers
+    if requested_headers and "x-wallet-address" not in requested_headers.lower():
+        allowed_headers = f"{requested_headers}, x-wallet-address"
     
     return JSONResponse(
         content={"message": "OK"},
         status_code=200,
-        headers=response_headers
+        headers={
+            "Access-Control-Allow-Origin": origin if origin != "*" else "*",
+            "Access-Control-Allow-Credentials": "true" if origin != "*" else "false",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+            "Access-Control-Allow-Headers": allowed_headers or "*",
+            "Access-Control-Max-Age": "600",
+            "Content-Type": "application/json",
+            "Content-Length": "2"
+        },
     )
 
 if __name__ == "__main__":

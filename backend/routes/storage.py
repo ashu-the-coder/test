@@ -101,11 +101,29 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/files")
-async def get_user_files(request: Request, current_user: dict = Depends(get_current_user)):
+async def get_user_files(
+    request: Request, 
+    current_user: dict = Depends(get_current_user),
+    x_wallet_address: Optional[str] = Header(None, alias="X-Wallet-Address")
+):
     try:
         username = current_user.get('username', 'unknown')
         client_ip = request.client.host if request else "unknown"
         logger.info(f"Getting files for user: {username} from IP: {client_ip}")
+        
+        # Log headers for debugging
+        all_headers = dict(request.headers)
+        logger.info(f"Request headers received in /files: {all_headers}")
+        
+        # Try to get wallet address from multiple possible sources (header variations)
+        wallet_address = x_wallet_address or request.headers.get("x-wallet-address") or request.headers.get("X-Wallet-Address") 
+        
+        # If we found a wallet address, use it
+        if wallet_address:
+            logger.info(f"Wallet address found: {wallet_address}")
+            # Add wallet address to user info if it doesn't already have one
+            if not current_user.get("wallet_address"):
+                current_user["wallet_address"] = wallet_address
         
         # Get files using metadata service - handles both B2C and enterprise users
         files = await metadata_service.get_user_files(current_user)
@@ -215,18 +233,49 @@ async def delete_file(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.options("/files")
-async def files_options():
+async def files_options(request: Request):
     """
     Handle OPTIONS requests for the files endpoint explicitly.
     This helps resolve CORS preflight issues.
     """
+    # Get the requested headers from the preflight request
+    requested_headers = request.headers.get("access-control-request-headers", "").lower()
+    origin = request.headers.get("origin", "*")
+    
+    logger.info(f"Handling OPTIONS request for /files from {origin}")
+    logger.debug(f"Requested headers: {requested_headers}")
+    
+    # Ensure X-Wallet-Address is included in allowed headers
+    if requested_headers:
+        # If specific headers were requested, make sure our custom header is included
+        if "x-wallet-address" not in requested_headers:
+            allowed_headers = f"{requested_headers}, x-wallet-address"
+        else:
+            allowed_headers = requested_headers
+    else:
+        # If no specific headers were requested, include all common ones explicitly
+        allowed_headers = "authorization, content-type, x-requested-with, accept, origin, content-language, accept-language, x-wallet-address, x-api-key"
+    
+    # Use * for Access-Control-Allow-Origin if origin is not specified
+    headers = {
+        "Access-Control-Allow-Origin": origin if origin != "*" else "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",  # Include POST in case it's needed
+        "Access-Control-Allow-Headers": allowed_headers,
+        "Access-Control-Max-Age": "600"
+    }
+    
+    # Only set credentials to true if origin is specified and not wildcard
+    if origin != "*" and origin != "":
+        headers["Access-Control-Allow-Credentials"] = "true"
+    else:
+        headers["Access-Control-Allow-Credentials"] = "false"
+    
+    logger.debug(f"Returning OPTIONS response with headers: {headers}")
+    
     return JSONResponse(
         content={"message": "OK"},
         status_code=200,
-        headers={
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
-        },
+        headers=headers,
     )
 
 @router.options("/upload")
@@ -272,17 +321,34 @@ async def download_options(file_hash: str):
     )
 
 @router.options("/{path:path}")
-async def options_handler(path: str):
+async def options_handler(request: Request, path: str):
     """
     Catch-all OPTIONS handler for any storage endpoint.
     This ensures all OPTIONS preflight requests are handled correctly.
     """
-    logger.info(f"Handling OPTIONS request for path: /{path}")
+    # Get details from the request
+    origin = request.headers.get("origin", "")
+    requested_method = request.headers.get("access-control-request-method", "")
+    requested_headers = request.headers.get("access-control-request-headers", "")
+    
+    logger.info(f"Handling OPTIONS request for path: /{path} from {origin}")
+    logger.debug(f"Requested method: {requested_method}, headers: {requested_headers}")
+    
+    # Create comprehensive list of allowed headers
+    allowed_headers = (
+        "content-type, authorization, x-requested-with, accept, origin, "
+        "content-language, accept-language, x-wallet-address, x-csrf-token, "
+        "access-control-request-method, access-control-request-headers, x-api-key"
+    )
+    
     return JSONResponse(
         content={"message": "OK"},
         status_code=200,
         headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
             "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin, Content-Language, Accept-Language",
+            "Access-Control-Allow-Headers": allowed_headers,
+            "Access-Control-Max-Age": "600"
         },
     )
