@@ -62,6 +62,13 @@ class EnterpriseCreate(BaseModel):
 class UserLogin(BaseModel):
     username: str
     password: str
+    wallet_address: Optional[str] = None
+    
+class EnterpriseLogin(BaseModel):
+    username: str
+    password: str
+    enterprise_id: str
+    wallet_address: Optional[str] = None
 
 class Token(BaseModel):
     access_token: str
@@ -92,8 +99,23 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         username = payload.get("sub")
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid authentication token")
-        return {"username": username}
-    except Exception:
+        
+        # Extract additional information from token
+        role = payload.get("role", "individual")
+        enterprise_id = payload.get("enterprise_id")
+        
+        user_info = {
+            "username": username,
+            "role": role
+        }
+        
+        # Include enterprise ID if present
+        if enterprise_id:
+            user_info["enterprise_id"] = enterprise_id
+            
+        return user_info
+    except Exception as e:
+        logger.error(f"Error validating token: {str(e)}")
         raise HTTPException(status_code=401, detail="Invalid authentication token")
         
 def get_current_active_user(current_user: Dict = Depends(get_current_user)) -> Dict:
@@ -289,6 +311,142 @@ async def login_options():
             "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
         },
     )
+    
+@router.options("/enterprise/login")
+async def enterprise_login_options():
+    """
+    Handle OPTIONS requests for the enterprise login endpoint explicitly.
+    This helps resolve CORS preflight issues.
+    """
+    return JSONResponse(
+        content={"message": "OK"},
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
+        },
+    )
+
+@router.post("/enterprise/login", response_model=Token)
+async def enterprise_login(
+    request: Request,
+    enterprise_login: Optional[EnterpriseLogin] = None
+):
+    """
+    Enterprise-specific login endpoint that requires an enterprise_id field
+    """
+    try:
+        # Get client IP address for logging
+        client_ip = request.client.host if request else "unknown"
+        
+        # Log request details
+        logger.info(f"Enterprise login request from IP: {client_ip}")
+        
+        # Get request data - first check if we have the model
+        if enterprise_login:
+            login_username = enterprise_login.username
+            login_password = enterprise_login.password
+            enterprise_id = enterprise_login.enterprise_id
+            wallet_address = enterprise_login.wallet_address
+        else:
+            # Otherwise try to parse from request body
+            try:
+                body = await request.json()
+                login_username = body.get("username")
+                login_password = body.get("password")
+                enterprise_id = body.get("enterprise_id")
+                wallet_address = body.get("wallet_address")
+            except Exception as e:
+                logger.error(f"Error parsing enterprise login request body: {str(e)}")
+                raise HTTPException(status_code=400, detail="Invalid request format")
+                
+        logger.info(f"Enterprise login attempt for username: {login_username}, enterprise_id: {enterprise_id}")
+                
+        # Check if we have all required credentials
+        if not login_username or not login_password or not enterprise_id:
+            logger.warning("Enterprise login attempt with missing credentials")
+            raise HTTPException(status_code=400, detail="Missing credentials (username, password, or enterprise_id)")
+            
+        normalized_username = login_username.lower()
+        logger.info(f"Normalized username for enterprise login: {normalized_username}")
+        
+        # Ensure we have a valid MongoDB connection and collections
+        try:
+            users_collection = get_users_collection()
+            enterprises_collection = db["enterprises"] 
+            accounts_collection = db["accounts"]
+            logger.debug("Connected to MongoDB collections for enterprise login attempt")
+        except Exception as e:
+            logger.error(f"MongoDB connection error during enterprise login: {str(e)}")
+            raise HTTPException(status_code=500, detail="Database connection error")
+            
+        # First check if the enterprise exists
+        enterprise = enterprises_collection.find_one({"_id": enterprise_id})
+        if not enterprise:
+            logger.warning(f"Enterprise login failed - enterprise ID not found: {enterprise_id}")
+            raise HTTPException(status_code=401, detail=f"Enterprise ID '{enterprise_id}' not found")
+            
+        # Then find the user account within this enterprise
+        db_user = accounts_collection.find_one({
+            "username": normalized_username,
+            "enterprise_id": enterprise_id
+        })
+        
+        if not db_user:
+            # Also check the users collection in case this is a system user with enterprise access
+            db_user = users_collection.find_one({
+                "username": normalized_username, 
+                "$or": [
+                    {"role": "enterprise"}, 
+                    {"enterprise_id": enterprise_id},
+                    {"enterprises": {"$in": [enterprise_id]}}
+                ]
+            })
+            
+        if not db_user:
+            logger.warning(f"Enterprise login failed - user not found: {normalized_username} for enterprise: {enterprise_id}")
+            raise HTTPException(status_code=401, detail=f"User '{login_username}' not found for this enterprise")
+            
+        if db_user['password'] != login_password:
+            logger.warning(f"Enterprise login failed - incorrect password for user: {normalized_username}")
+            raise HTTPException(status_code=401, detail="Invalid password")
+            
+        # If wallet address is provided, update the user record with it
+        if wallet_address and wallet_address not in db_user.get('wallet_addresses', []):
+            try:
+                # Create or append to the wallet_addresses array
+                if 'wallet_addresses' not in db_user:
+                    db_user['wallet_addresses'] = [wallet_address]
+                else:
+                    db_user['wallet_addresses'].append(wallet_address)
+                    
+                # Update the user record
+                if '_id' in db_user:
+                    collection = accounts_collection if 'enterprise_id' in db_user else users_collection
+                    collection.update_one(
+                        {"_id": db_user["_id"]},
+                        {"$set": {"wallet_addresses": db_user['wallet_addresses']}}
+                    )
+                    logger.info(f"Updated wallet address for user {normalized_username}")
+            except Exception as e:
+                logger.error(f"Error updating wallet address: {str(e)}")
+                # Continue anyway - this is not critical
+        
+        # Create token with enterprise role information
+        access_token = create_access_token(
+            data={"sub": normalized_username}, 
+            user_role="enterprise",
+            enterprise_id=enterprise_id
+        )
+        logger.info(f"Generated enterprise access token for user: {normalized_username}, enterprise: {enterprise_id}")
+        return {"access_token": access_token, "token_type": "bearer"}
+        
+    except HTTPException as he:
+        # Re-raise HTTP exceptions
+        raise he
+    except Exception as e:
+        logger.error(f"Unexpected error in enterprise login: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @router.get("/me", response_model=User)
 async def read_users_me(current_user: dict = Depends(get_current_user)):
@@ -368,3 +526,43 @@ async def update_enterprise_profile(enterprise: EnterpriseUpdate, current_user: 
         user_type=updated_user.get("user_type", "individual"),
         **{k: updated_user.get(k) for k in ["company_name", "business_email", "industry", "employee_count", "contact_person", "contact_phone"] if k in updated_user}
     )
+
+def get_token_data(current_user: Dict) -> Dict:
+    """
+    Extract all data from the JWT token for the current authenticated user
+    
+    Args:
+        current_user: Current user dict with username
+        
+    Returns:
+        Dict: All data from the JWT token
+    """
+    try:
+        # Extract the Authorization header
+        from fastapi import Request
+        from starlette.concurrency import run_in_threadpool
+        import inspect
+        
+        # Get the current active request from the context
+        # This is a bit hacky but allows us to get the request
+        for frame_info in inspect.stack():
+            request = frame_info.frame.f_locals.get("request")
+            if isinstance(request, Request):
+                break
+                
+        if not request:
+            return {"username": current_user.get("username")}
+            
+        # Extract the token from the Authorization header
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return {"username": current_user.get("username")}
+            
+        token = auth_header.split(" ")[1]
+        
+        # Decode the token
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except Exception as e:
+        logger.error(f"Error extracting token data: {str(e)}")
+        return {"username": current_user.get("username")}

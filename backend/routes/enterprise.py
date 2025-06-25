@@ -192,3 +192,45 @@ async def list_enterprises(current_user=Depends(get_current_active_user)):
     enterprises = list(db.enterprises.find())
     
     return [Enterprise(**enterprise) for enterprise in enterprises]
+
+@router.get("/profile", response_model=Dict[str, Any])
+async def get_current_enterprise_profile(current_user=Depends(get_current_active_user)):
+    """
+    Get current enterprise profile based on JWT token. Requires authentication.
+    This endpoint is used by the enterprise dashboard.
+    """
+    # Extract enterprise ID from JWT token
+    try:
+        from routes.auth import get_token_data
+        token_data = get_token_data(current_user)
+        enterprise_id = token_data.get("enterprise_id")
+        
+        if not enterprise_id:
+            raise HTTPException(status_code=400, detail="No enterprise ID found in token")
+            
+        # Find enterprise by ID
+        enterprise = db.enterprises.find_one({"enterprise_id": enterprise_id})
+        if not enterprise:
+            # Try with _id if not found with enterprise_id
+            enterprise = db.enterprises.find_one({"_id": enterprise_id})
+            
+        if not enterprise:
+            raise HTTPException(status_code=404, detail="Enterprise not found")
+        
+        # Count products and batches
+        product_count = db.products.count_documents({"enterprise_id": enterprise_id})
+        batch_count = db.batches.count_documents({"enterprise_id": enterprise_id})
+        
+        # Convert MongoDB _id to string if needed
+        if enterprise.get("_id"):
+            enterprise["id"] = str(enterprise["_id"])
+            del enterprise["_id"]
+            
+        # Add counts to response
+        enterprise["productCount"] = product_count
+        enterprise["batchCount"] = batch_count
+        
+        return enterprise
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving enterprise profile: {str(e)}")

@@ -76,6 +76,21 @@ def create_test_users():
                 })
                 print(f"Created admin account for enterprise: {enterprise_id}")
             
+            # Create enterprise user with username/password for testing the login
+            if not accounts_collection.find_one({"username": "acmeuser"}):
+                accounts_collection.insert_one({
+                    "username": "acmeuser",
+                    "password": "Acme@123",
+                    "user_id": str(uuid.uuid4()),
+                    "enterprise_id": enterprise_id,
+                    "name": "Acme Test User",
+                    "email": "test@acmecorp.com",
+                    "role": "user",
+                    "permissions": ["view_inventory", "view_batch", "view_trace"],
+                    "created_at": datetime.now()
+                })
+                print(f"Created test user account for enterprise: {enterprise_id}")
+            
         # Enterprise 2: XYZ Ltd
         enterprise_id = "xyz_ltd"
         if not enterprises_collection.find_one({"enterprise_id": enterprise_id}):

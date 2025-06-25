@@ -7,7 +7,7 @@ const EnterpriseWelcome = () => {
   const { darkMode } = useTheme();
 
   const handleSignIn = () => {
-    navigate('/login'); // Redirect to existing login system
+    navigate('/enterprise/login'); // Redirect to enterprise login
   };
 
   const handleRegister = () => {

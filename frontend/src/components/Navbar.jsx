@@ -1,12 +1,13 @@
 import { useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../App';
 import { useTheme } from '../contexts/ThemeContext';
 
 function Navbar() {
-  const { logout, isConnected } = useContext(AuthContext);
+  const { logout, isConnected, userRole } = useContext(AuthContext);
   const { darkMode, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const isEnterprise = userRole === 'enterprise';
 
   const handleLogout = () => {
     logout();
@@ -19,15 +20,62 @@ function Navbar() {
         <div className="flex justify-between h-16">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
-              <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">Xinetee</span>
+              <span 
+                className={`text-2xl font-bold cursor-pointer ${isEnterprise ? 'text-blue-600 dark:text-blue-400' : 'text-indigo-600 dark:text-indigo-400'}`}
+                onClick={() => navigate(isEnterprise ? '/enterprise/dashboard' : '/dashboard')}
+              >
+                {isEnterprise ? 'Xinetee Enterprise' : 'Xinetee'}
+              </span>
+            </div>
+            
+            {/* Navigation links */}
+            <div className="hidden md:ml-6 md:flex md:space-x-4">
+              {isEnterprise ? (
+                <>
+                  <Link 
+                    to="/enterprise/dashboard" 
+                    className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    Dashboard
+                  </Link>
+                  <Link 
+                    to="/enterprise/products" 
+                    className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    Products
+                  </Link>
+                  <Link 
+                    to="/enterprise/inventory" 
+                    className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    Inventory
+                  </Link>
+                  <Link 
+                    to="/enterprise/traceability" 
+                    className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    Traceability
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link 
+                    to="/dashboard" 
+                    className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    Dashboard
+                  </Link>
+                </>
+              )}
             </div>
           </div>
+          
           <div className="flex items-center space-x-4">
             <span className={`px-3 py-1 rounded-full text-sm ${isConnected ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'}`}>
               {isConnected ? 'Wallet Connected' : 'Wallet Disconnected'}
             </span>
             <button
-              onClick={() => navigate('/profile')}
+              onClick={() => navigate(isEnterprise ? '/enterprise/profile' : '/profile')}
               className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-indigo-400"
             >
               Profile

@@ -8,6 +8,8 @@ import Profile from './components/Profile';
 import Navbar from './components/Navbar';
 import EnterpriseWelcome from './components/EnterpriseWelcome';
 import EnterpriseRegister from './components/EnterpriseRegister';
+import EnterpriseLogin from './components/EnterpriseLogin';
+import EnterpriseDashboard from './components/EnterpriseDashboard';
 import EnterpriseModules from './components/EnterpriseModules';
 import EnterpriseProfile from './components/EnterpriseProfile';
 import ProductManagement from './components/ProductManagement';
@@ -162,34 +164,43 @@ function App() {
               />
               <Route path="/enterprise" element={<EnterpriseWelcome />} />
               <Route path="/enterprise/register" element={<EnterpriseRegister />} />
+              <Route path="/enterprise/login" element={
+                !token ? <EnterpriseLogin /> : <Navigate to="/enterprise/dashboard" replace />
+              } />
+              <Route
+                path="/enterprise/dashboard"
+                element={
+                  token ? <EnterpriseDashboard /> : <Navigate to="/enterprise/login" replace />
+                }
+              />
               <Route
                 path="/enterprise/modules"
                 element={
-                  token ? <EnterpriseModules /> : <Navigate to="/login" replace />
+                  token ? <EnterpriseModules /> : <Navigate to="/enterprise/login" replace />
                 }
               />
               <Route
                 path="/enterprise/profile"
                 element={
-                  token ? <EnterpriseProfile /> : <Navigate to="/login" replace />
+                  token ? <EnterpriseProfile /> : <Navigate to="/enterprise/login" replace />
                 }
               />
               <Route
                 path="/enterprise/products"
                 element={
-                  token ? <ProductManagement /> : <Navigate to="/login" replace />
+                  token ? <ProductManagement /> : <Navigate to="/enterprise/login" replace />
                 }
               />
               <Route
                 path="/enterprise/traceability"
                 element={
-                  token ? <Traceability /> : <Navigate to="/login" replace />
+                  token ? <Traceability /> : <Navigate to="/enterprise/login" replace />
                 }
               />
               <Route
                 path="/enterprise/inventory"
                 element={
-                  token ? <InventoryManagement /> : <Navigate to="/login" replace />
+                  token ? <InventoryManagement /> : <Navigate to="/enterprise/login" replace />
                 }
               />
               <Route path="/" element={<Navigate to="/login" replace />} />
