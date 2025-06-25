@@ -1,9 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from services.blockchain import BlockchainService
 from services.ipfs import IPFSService
 from services.metadata import MetadataService
 from routes.auth import get_current_user
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse, JSONResponse
 import io
 import logging
 from models.user import User, FileMetadata
@@ -112,3 +112,18 @@ async def get_user_by_username(username: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching user data: {str(e)}")
+
+@router.options("/{path:path}")
+async def download_options_handler(path: str):
+    """
+    Catch-all OPTIONS handler for download routes.
+    """
+    logger.info(f"Handling OPTIONS request for download path: /{path}")
+    return JSONResponse(
+        content={"message": "OK"},
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin, Content-Language, Accept-Language",
+        },
+    )

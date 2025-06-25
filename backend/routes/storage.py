@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Header
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Header, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 import os
 import hashlib
 import json
@@ -101,9 +101,11 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/files")
-async def get_user_files(current_user: dict = Depends(get_current_user)):
+async def get_user_files(request: Request, current_user: dict = Depends(get_current_user)):
     try:
-        logger.info(f"Getting files for user: {current_user.get('username', 'unknown')}")
+        username = current_user.get('username', 'unknown')
+        client_ip = request.client.host if request else "unknown"
+        logger.info(f"Getting files for user: {username} from IP: {client_ip}")
         
         # Get files using metadata service - handles both B2C and enterprise users
         files = await metadata_service.get_user_files(current_user)
@@ -113,13 +115,20 @@ async def get_user_files(current_user: dict = Depends(get_current_user)):
             logger.info("No files found in metadata service, trying legacy approach")
             normalized_username = current_user.get("username", "").lower()
             if normalized_username:
-                db_user = users_collection.find_one({"username": normalized_username})
-                files = db_user.get("files", []) if db_user else []
+                try:
+                    db_user = users_collection.find_one({"username": normalized_username})
+                    files = db_user.get("files", []) if db_user else []
+                    logger.info(f"Retrieved {len(files)} files from user document for {normalized_username}")
+                except Exception as db_error:
+                    logger.error(f"Error retrieving files from users collection: {str(db_error)}")
+                    files = []
+        else:
+            logger.info(f"Retrieved {len(files)} files from metadata service for {username}")
                 
         # Always return as { files: [...] } for frontend compatibility
         return {"files": [f for f in files]}
     except Exception as e:
-        logger.error(f"Error getting user files: {str(e)}")
+        logger.error(f"Error getting user files: {str(e)}", exc_info=True)
         return {"files": []}
 
 @router.get("/user", response_model=User)
@@ -204,3 +213,76 @@ async def delete_file(
         return {"status": "success", "tx_hash": tx_hash}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.options("/files")
+async def files_options():
+    """
+    Handle OPTIONS requests for the files endpoint explicitly.
+    This helps resolve CORS preflight issues.
+    """
+    return JSONResponse(
+        content={"message": "OK"},
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
+        },
+    )
+
+@router.options("/upload")
+async def upload_options():
+    """
+    Handle OPTIONS requests for the upload endpoint explicitly.
+    """
+    return JSONResponse(
+        content={"message": "OK"},
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
+        },
+    )
+
+@router.options("/user")
+async def user_options():
+    """
+    Handle OPTIONS requests for the user endpoint explicitly.
+    """
+    return JSONResponse(
+        content={"message": "OK"},
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
+        },
+    )
+
+@router.options("/download/{file_hash}")
+async def download_options(file_hash: str):
+    """
+    Handle OPTIONS requests for the download endpoint explicitly.
+    """
+    return JSONResponse(
+        content={"message": "OK"},
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
+        },
+    )
+
+@router.options("/{path:path}")
+async def options_handler(path: str):
+    """
+    Catch-all OPTIONS handler for any storage endpoint.
+    This ensures all OPTIONS preflight requests are handled correctly.
+    """
+    logger.info(f"Handling OPTIONS request for path: /{path}")
+    return JSONResponse(
+        content={"message": "OK"},
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin, Content-Language, Accept-Language",
+        },
+    )
