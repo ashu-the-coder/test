@@ -5,6 +5,7 @@ from pathlib import Path
 import os
 import pymongo
 from pymongo import MongoClient
+from urllib.parse import urlparse
 
 # Load environment variables
 load_dotenv()
@@ -19,11 +20,44 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Function to extract database name from MongoDB URI
+def extract_db_name_from_uri(uri):
+    """
+    Parse MongoDB URI to extract database name, handling cases with
+    authentication credentials and query parameters properly.
+    
+    Returns the database name or a default value if not found
+    """
+    default_db = "xinete_storage"
+    
+    if not uri:
+        return default_db
+        
+    try:
+        # Parse the URI
+        parsed = urlparse(uri)
+        
+        # Extract path and remove leading slash
+        path = parsed.path
+        if path.startswith('/'):
+            path = path[1:]
+            
+        # If path has query parameters, extract just the DB name
+        if '?' in path:
+            path = path.split('?')[0]
+            
+        # Return the extracted database name or default
+        return path if path else default_db
+    except Exception as e:
+        logger.error(f"Error parsing MongoDB URI: {e}")
+        return default_db
+
 # Setup MongoDB connection with authentication support
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/xinete_storage")
 MONGODB_URL = os.getenv("MONGODB_URL", MONGO_URI)  # Fallback to MONGO_URI if MONGODB_URL not set
 MONGODB_USERNAME = os.getenv("MONGODB_USERNAME", "")
 MONGODB_PASSWORD = os.getenv("MONGODB_PASSWORD", "")
+MONGODB_DB = os.getenv("MONGODB_DB", "")  # Allow explicit database name override
 
 # Connect to MongoDB
 try:
@@ -41,8 +75,8 @@ try:
             client = MongoClient(auth_url)
         else:
             client = MongoClient(MONGODB_URL)
-            # Set authentication directly if needed
-            db_name = MONGODB_URL.split("/")[-1] if "/" in MONGODB_URL else "xinete_storage"
+            # Get database name properly
+            db_name = extract_db_name_from_uri(MONGODB_URL)
             logger.info(f"Using direct authentication with MongoDB")
             client[db_name].authenticate(MONGODB_USERNAME, MONGODB_PASSWORD)
     else:
@@ -56,9 +90,11 @@ except Exception as e:
     logger.error(f"Failed to connect to MongoDB: {str(e)}")
     raise
 
-# Get database reference
-db_name = MONGODB_URL.split("/")[-1] if "/" in MONGODB_URL else "xinete_storage"
+# Get database reference - prioritize explicit DB name if provided
+db_name = MONGODB_DB if MONGODB_DB else extract_db_name_from_uri(MONGODB_URL)
 db = client[db_name]
+
+logger.info(f"Using database: {db_name}")
 
 # Configure CORS
 default_origins = ["http://164.52.203.17:5173", "http://localhost:5173"]

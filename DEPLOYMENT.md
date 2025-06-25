@@ -26,9 +26,10 @@ JWT_SECRET=c8d1a95d37cb4e06b3e3fa1f89a37d2c9b8f276e3a094c51b5f1d98e2f7d4a6b
 MONGODB_URL=mongodb://localhost:27017/xinete_storage
 MONGODB_USERNAME=your_mongodb_username
 MONGODB_PASSWORD=your_mongodb_password
+MONGODB_DB=xinete_storage
 
 # Alternative: MongoDB Connection String with Authentication
-# MONGODB_URL=mongodb://username:password@localhost:27017/xinete_storage
+# MONGODB_URL=mongodb://username:password@localhost:27017/xinete_storage?authSource=admin
 ```
 
 ### 2. Initialize Database Schema
