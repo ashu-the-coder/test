@@ -1,10 +1,15 @@
 from fastapi import APIRouter, HTTPException, Depends
 from services.blockchain import BlockchainService
 from services.ipfs import IPFSService
+from services.metadata import MetadataService
 from routes.auth import get_current_user
 from fastapi.responses import StreamingResponse
 import io
+import logging
 from models.user import User, FileMetadata
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 blockchain_service = BlockchainService()
@@ -60,13 +65,50 @@ async def download_file(file_hash: str, current_user: dict = Depends(get_current
 
 @router.get("/user/{username}", response_model=User)
 async def get_user_by_username(username: str):
-    from routes.auth import load_users
-    users = load_users()
-    normalized_username = username.lower()
-    user_data = users.get(normalized_username, {})
-    wallet_address = user_data.get("wallet_address", None)
-    from services.metadata import MetadataService
-    metadata_service = MetadataService()
-    files = await metadata_service.get_user_files(username)
-    file_objs = [FileMetadata(**f) for f in files]
-    return User(username=username, wallet_address=wallet_address, files=file_objs)
+    try:
+        from utils.mongodb import get_users_collection
+        users_collection = get_users_collection()
+        
+        # Normalize username
+        normalized_username = username.lower()
+        
+        # Get user from MongoDB
+        db_user = users_collection.find_one({"username": normalized_username})
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get wallet address
+        wallet_address = db_user.get("wallet_address", None)
+        
+        # Get user files using metadata service
+        from services.metadata import MetadataService
+        metadata_service = MetadataService()
+        
+        # Get files - first try with username string for B2C users
+        files = await metadata_service.get_user_files(normalized_username)
+        
+        # If no files found and it might be an enterprise user, try with user dict
+        if not files and "enterprise_id" in db_user:
+            user_dict = {"username": normalized_username, "enterprise_id": db_user["enterprise_id"]}
+            files = await metadata_service.get_user_files(user_dict)
+        
+        # If still no files, check the legacy storage in user document
+        if not files:
+            files = db_user.get("files", [])
+        
+        # Convert all files to proper FileMetadata objects
+        file_objs = []
+        for f in files:
+            try:
+                if isinstance(f, dict):
+                    file_objs.append(FileMetadata(**f))
+                else:
+                    file_objs.append(f)
+            except Exception as e:
+                pass  # Skip invalid files
+                
+        return User(username=username, wallet_address=wallet_address, files=file_objs)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching user data: {str(e)}")
